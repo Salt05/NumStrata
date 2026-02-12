@@ -1,14 +1,18 @@
+<<<<<<< HEAD
 # This .gitignore file should be placed at the root of your Unity project directory
 #
 # Get latest from https://github.com/github/gitignore/blob/main/Unity.gitignore
 #
 .utmp/
+=======
+>>>>>>> 7394358 (Update .gitignore for Unity and clean up project)
 /[Ll]ibrary/
 /[Tt]emp/
 /[Oo]bj/
 /[Bb]uild/
 /[Bb]uilds/
 /[Ll]ogs/
+<<<<<<< HEAD
 /[Uu]ser[Ss]ettings/
 *.log
 
@@ -42,6 +46,21 @@ ExportedObj/
 .consulo/
 *.csproj
 *.unityproj
+=======
+/[Mm]emoryCaptures/
+/[Uu]serSettings/
+
+# Asset meta files must be kept, even if they contain personal settings
+!/[Aa]ssets/**/*.meta
+
+# Unity3D Generated File
+[Aa]ssets/AssetStoreTools*
+
+# VS Code & Visual Studio files
+.vscode/
+.vs/
+*.csproj
+>>>>>>> 7394358 (Update .gitignore for Unity and clean up project)
 *.sln
 *.suo
 *.tmp
@@ -49,6 +68,7 @@ ExportedObj/
 *.userprefs
 *.pidb
 *.booproj
+<<<<<<< HEAD
 *.svd
 *.pdb
 *.mdb
@@ -97,3 +117,15 @@ InitTestScene*.unity*
 
 # Auto-generated scenes by play mode tests
 /[Aa]ssets/[Ii]nit[Tt]est[Ss]cene*.unity*
+=======
+*.svntmp
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+>>>>>>> 7394358 (Update .gitignore for Unity and clean up project)
