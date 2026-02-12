@@ -1,6 +1,6 @@
 # NumStrata – Project Documentation
 
-> **Codename:** Salt2 (Revamp)
+> **Codename:** NumStrata
 > **Genre:** Puzzle / Math / Strategy / Mahjong-Solitaire
 > **Platform:** Mobile (Android/iOS)
 > **Engine:** Unity (C#)
