@@ -1,0 +1,39 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: ad24fcfa52b4ef34da814bece732f740, type: 3}
+  m_Name: TileSpriteData_Default
+  m_EditorClassIdentifier: Assembly-CSharp::NumStrata.Data.TileSpriteData
+  numberSprites:
+  - {fileID: 3743400913960958728, guid: fd0489cce38242548b9e6c5b0d46f381, type: 3}
+  - {fileID: 8618492603980340985, guid: 523cb4861e7004e45b63d2fbc28be2e2, type: 3}
+  - {fileID: -190342030134651538, guid: c595f24cee313754facecdf509035558, type: 3}
+  - {fileID: -3040358667512789281, guid: 0be23af22cddae442b42b0b803145931, type: 3}
+  - {fileID: -2387753078274775442, guid: 4ce4af90f02916b418cbe38436fd147b, type: 3}
+  - {fileID: -99023642334997801, guid: e8fdbc425848891488b2bc8273c9aad8, type: 3}
+  - {fileID: 2411634590885604409, guid: 29e856e1682d2e342a24cda226d35796, type: 3}
+  - {fileID: 2158432718816671088, guid: 45df3e1984656834d9141b5d306a4bfa, type: 3}
+  - {fileID: -3741481614603227604, guid: 895077aab4f90da4c9fdaa65fe79cad8, type: 3}
+  - {fileID: 8716775400553303566, guid: e8642e95c11b34a46a8f6c9e24f6ab7f, type: 3}
+  - {fileID: -4353325709225323535, guid: 11da730ad83e80e48bdd8ceeca0333c3, type: 3}
+  - {fileID: -630271293097564877, guid: e09afd1ef20b56040af1ec00ce5fdaae, type: 3}
+  - {fileID: -5792091556207498957, guid: b27cead7205ba4b419725779912b7cc2, type: 3}
+  - {fileID: -5253272007946317971, guid: 1c23aad8ab3f83843b7fc626e14393ea, type: 3}
+  - {fileID: -6149553427993528765, guid: f386dd8436cb720468f759401efe086c, type: 3}
+  - {fileID: 7655203381451189448, guid: 5508c08817eb9b841a1364293c529a4e, type: 3}
+  - {fileID: 6069199007963641299, guid: d66b684aa7b51bc44bec101526ba05ff, type: 3}
+  - {fileID: 1224702805232938139, guid: 8da29f9176eecb044851f532e1b64378, type: 3}
+  - {fileID: 534774017787025027, guid: 33d05a80733342f4ca523a3c26a3fe8e, type: 3}
+  plusSprite: {fileID: 2503100082225290719, guid: 194b93c8f442b3644ae47f7c104b0787, type: 3}
+  minusSprite: {fileID: 7301469000554056715, guid: 4dd3437610c2aff41a6e76de8a30dfa0, type: 3}
+  multiplySprite: {fileID: 8733440543631911975, guid: 0f58828001680e44b8f9564fd7d2654d, type: 3}
+  divideSprite: {fileID: -6335417360327516019, guid: f3471755deb76bb45bd32fa6a78f5d6b, type: 3}
+  mysterySprite: {fileID: 5462569553738278810, guid: b19c8b06623240a4a9273a8b94a7f904, type: 3}
