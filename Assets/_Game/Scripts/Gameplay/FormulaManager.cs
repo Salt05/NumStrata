@@ -1,6 +1,7 @@
 using UnityEngine;
 using UnityEngine.UI;
 using System.Collections.Generic;
+using NumStrata.Utils;
 
 namespace NumStrata.Gameplay
 {
@@ -27,6 +28,11 @@ namespace NumStrata.Gameplay
         private Tile[] occupiedTiles = new Tile[5];
         private Tile[] occupiedConveyorTiles = new Tile[6];
 
+        // Hệ thống hàng đợi để thực hiện hoạt ảnh Visual sau khi đã phê duyệt Logic
+        private struct PlacementOrder { public Tile tile; public int slotIndex; }
+        private Queue<PlacementOrder> visualQueue = new Queue<PlacementOrder>();
+        private bool isProcessingQueue = false;
+
         /// <summary>
         /// Khởi tạo Singleton để các script khác (như Tile.cs) có thể dễ dàng gọi đến FormulaManager.
         /// </summary>
@@ -44,39 +50,131 @@ namespace NumStrata.Gameplay
         }
 
         /// <summary>
-        /// Hàm này thử thêm Tile bị click vào vị trí phù hợp trong 5 ô công thức.
-        /// Slot 2 (index 1) dành cho Toán tử.
-        /// Slot 1, 3, 4, 5 (index 0, 2, 3, 4) dành cho Con số.
+        /// Tín hiệu "Xin phép" từ Tile. Đầu não sẽ kiểm tra xem có chỗ trống không.
         /// </summary>
-        public bool TryAddTile(Tile tile)
+public bool RequestTilePlacement(Tile tile)
         {
+            int targetSlotIndex = -1;
+
             if (tile.type == TileType.Operator)
             {
-                // Nếu là toán tử, chỉ được vào Slot 2 (index 1)
-                if (occupiedTiles[1] == null)
-                {
-                    AssignTileToSlot(tile, formulaSlots[1], 1);
-                    CheckFormulaCompletion(); // Kiểm tra xem đã đủ để tính chưa
-                    return true;
-                }
+                if (occupiedTiles[1] == null) targetSlotIndex = 1;
             }
             else
             {
-                // Nếu là số, tìm ô trống trong các slot 1, 3, 4, 5
                 int[] numberSlotIndices = { 0, 2, 3, 4 };
                 foreach (int i in numberSlotIndices)
                 {
                     if (occupiedTiles[i] == null)
                     {
-                        AssignTileToSlot(tile, formulaSlots[i], i);
-                        CheckFormulaCompletion(); // Kiểm tra xem đã đủ để tính chưa
-                        return true;
+                        targetSlotIndex = i;
+                        break;
                     }
                 }
             }
 
-            Debug.LogWarning("[FormulaManager] Không có ô phù hợp cho loại Tile này!");
-            return false;
+            if (targetSlotIndex == -1)
+            {
+                Debug.Log($"[FormulaBrain] Từ chối {tile.name}: Hết chỗ!");
+                return false;
+            }
+
+            // PHÊ DUYỆT:
+            occupiedTiles[targetSlotIndex] = tile; // Giữ chỗ logic
+            tile.ResolveOverlapOnAccept();        // Cho phép mở khóa Board
+
+            // Đưa vào hàng đợi hoạt ảnh
+            visualQueue.Enqueue(new PlacementOrder { tile = tile, slotIndex = targetSlotIndex });
+            if (!isProcessingQueue)
+            {
+                StartCoroutine(ProcessVisualQueue());
+            }
+
+            return true;
+        }
+
+        private System.Collections.IEnumerator ProcessVisualQueue()
+        {
+            isProcessingQueue = true;
+            while (visualQueue.Count > 0)
+            {
+                PlacementOrder order = visualQueue.Dequeue();
+                if (order.tile != null)
+                {
+                    // Giải phóng Conveyor nếu cần
+                    bool wasOnConveyor = false;
+                    for (int i = 0; i < occupiedConveyorTiles.Length; i++)
+                    {
+                        if (occupiedConveyorTiles[i] == order.tile)
+                        {
+                            occupiedConveyorTiles[i] = null;
+                            wasOnConveyor = true;
+                            break;
+                        }
+                    }
+
+                    if (wasOnConveyor)
+                    {
+                        ShiftConveyorTiles();
+                    }
+
+                    SnapTileToSlotWithAnimation(order.tile, formulaSlots[order.slotIndex]);
+                    CheckFormulaCompletion();
+                }
+                yield return null;
+            }
+            isProcessingQueue = false;
+        }
+
+        /// <summary>
+        /// Dồn các tile trên Conveyor về bên trái để lấp đầy các khoảng trống.
+        /// </summary>
+        public void ShiftConveyorTiles()
+        {
+            int insertPos = 0;
+            for (int i = 0; i < occupiedConveyorTiles.Length; i++)
+            {
+                if (occupiedConveyorTiles[i] != null)
+                {
+                    if (i != insertPos)
+                    {
+                        // 1. Dịch chuyển logic
+                        Tile tile = occupiedConveyorTiles[i];
+                        occupiedConveyorTiles[insertPos] = tile;
+                        occupiedConveyorTiles[i] = null;
+                        
+                        // 2. Cập nhật hình ảnh
+                        RectTransform rectT = tile.GetComponent<RectTransform>();
+                        Transform targetSlot = conveyorSlots[insertPos];
+                        
+                        if (rectT != null && targetSlot != null)
+                        {
+                            Vector2 renderedSize = rectT.rect.size;
+                            Vector2 sizeBefore = (renderedSize.x > 0f && renderedSize.y > 0f) ? renderedSize : rectT.sizeDelta;
+                            Vector3 scaleBefore = rectT.localScale;
+                            
+                            tile.transform.SetParent(targetSlot, true);
+                            
+                            rectT.anchorMin = new Vector2(0.5f, 0.5f);
+                            rectT.anchorMax = new Vector2(0.5f, 0.5f);
+                            rectT.pivot = new Vector2(0.5f, 0.5f);
+                            rectT.sizeDelta = sizeBefore;
+                            rectT.localScale = scaleBefore;
+                            rectT.SetAsLastSibling();
+                            
+                            if (UIEffectManager.Instance != null)
+                            {
+                                UIEffectManager.Instance.MoveTo(rectT, Vector2.zero, 0.25f);
+                            }
+                            else
+                            {
+                                rectT.anchoredPosition = Vector2.zero;
+                            }
+                        }
+                    }
+                    insertPos++;
+                }
+            }
         }
 
         /// <summary>
@@ -136,7 +234,6 @@ namespace NumStrata.Gameplay
         /// </summary>
         private void EvaluateCurrentFormula()
         {
-            // Gọi sang FormulaEvaluator (sẽ tạo ở bước sau)
             if (FormulaEvaluator.Instance != null)
             {
                 bool isCorrect = FormulaEvaluator.Instance.CheckResult(occupiedTiles);
@@ -145,17 +242,15 @@ namespace NumStrata.Gameplay
                 {
                     TrySpawnRemainderTileToConveyor();
                     Debug.Log("<color=green>[Formula] Phép tính CHÍNH XÁC!</color>");
+                    
+                    // Logic CLEAR ngay lập tức, Visual DELAYED
                     ClearFormula(true);
                 }
                 else
                 {
-                    // Nếu sai, theo yêu cầu: báo log, xóa tile tạm thời và cho chơi tiếp
-                    // Lưu ý: Nếu đầy cả 5 ô mà vẫn sai thì mới thực hiện xóa để tránh người chơi đang nhập dở Slot 5
                     if (occupiedTiles[4] != null || (occupiedTiles[0] != null && occupiedTiles[1] != null && occupiedTiles[2] != null && occupiedTiles[3] != null))
                     {
-                         // Tạm thời chỉ xóa khi người chơi nhập sai để họ chơi tiếp (theo yêu cầu)
-                         // Thực tế sau này sẽ xử thua theo GDD
-                         Debug.LogWarning("<color=red>[Formula] Phép tính SAI! Tạm thời xóa tile để chơi tiếp.</color>");
+                         Debug.LogWarning("<color=red>[Formula] Phép tính SAI! Xóa để chơi tiếp.</color>");
                          ClearFormula(false);
                     }
                 }
@@ -164,29 +259,66 @@ namespace NumStrata.Gameplay
 
         /// <summary>
         /// Xóa các tile trong thanh công thức.
+        /// Giải pháp: Xóa logic lập tức, chờ visual bay xong rồi thu nhỏ.
         /// </summary>
-        /// <param name="destroy">Nếu true sẽ xóa vĩnh viễn (khi thắng), false có thể trả về (tùy logic sau này)</param>
         public void ClearFormula(bool destroy)
         {
-            for (int i = 0; i < occupiedTiles.Length; i++)
+            Tile[] tilesToClear = (Tile[])occupiedTiles.Clone();
+            for (int i = 0; i < occupiedTiles.Length; i++) occupiedTiles[i] = null;
+
+            StartCoroutine(VisualClearSequence(tilesToClear, 0.3f));
+        }
+
+        private System.Collections.IEnumerator VisualClearSequence(Tile[] tiles, float delay)
+        {
+            yield return new WaitForSeconds(delay);
+            foreach (var tile in tiles)
             {
-                if (occupiedTiles[i] != null)
+                if (tile != null)
                 {
-                    if (destroy)
-                    {
-                        Destroy(occupiedTiles[i].gameObject);
-                    }
+                    if (UIEffectManager.Instance != null)
+                        StartCoroutine(ImprovedShrinkRoutine(tile.transform));
                     else
-                    {
-                        // Reset lại tile để có thể click lại (vì khi click thành công ta đã tắt raycast)
-                        Image img = occupiedTiles[i].backgroundRenderer;
-                        if (img != null) img.raycastTarget = true;
-                        
-                        Destroy(occupiedTiles[i].gameObject); // Tạm thời vẫn xóa theo yêu cầu của bạn
-                    }
-                    occupiedTiles[i] = null;
+                        Destroy(tile.gameObject);
                 }
             }
+        }
+
+        private System.Collections.IEnumerator ImprovedShrinkRoutine(Transform target)
+        {
+            float elapsed = 0;
+            float duration = 0.3f;
+            Vector3 startScale = target.localScale;
+            
+            // Phase 1: Nhấn nhẹ xuống (Pop up một chút trước khi biến mất)
+            float popDuration = 0.1f;
+            while (elapsed < popDuration)
+            {
+                if (target == null) yield break;
+                elapsed += Time.deltaTime;
+                float t = elapsed / popDuration;
+                // Scale to 1.2 then back
+                target.localScale = startScale * (1f + Mathf.Sin(t * Mathf.PI) * 0.15f);
+                yield return null;
+            }
+
+            // Phase 2: Thu nhỏ biến mất nhanh
+            elapsed = 0;
+            Vector3 currentScale = target.localScale;
+            while (elapsed < duration)
+            {
+                if (target == null) yield break;
+                elapsed += Time.deltaTime;
+                float t = elapsed / duration;
+                
+                // Ease In Back (Hơi lùi lại rồi biến mất nhanh)
+                float easeIn = t * t * t; // Simple cubic ease in
+                
+                target.localScale = Vector3.Lerp(currentScale, Vector3.zero, easeIn);
+                yield return null;
+            }
+            
+            if (target != null) Destroy(target.gameObject);
         }
 
         /// <summary>
@@ -196,7 +328,41 @@ namespace NumStrata.Gameplay
         {
             // Đánh dấu ô này đã bị chiếm bởi Tile hiện tại
             occupiedTiles[slotIndex] = tile;
-            SnapTileToSlotKeepingSize(tile, slotTransform);
+            SnapTileToSlotWithAnimation(tile, slotTransform);
+        }
+
+        private void SnapTileToSlotWithAnimation(Tile tile, Transform slotTransform)
+        {
+            RectTransform rectT = tile.GetComponent<RectTransform>();
+            if (rectT == null) return;
+
+            Vector2 sizeBefore = rectT.rect.size;
+            Vector3 scaleBefore = rectT.localScale;
+
+            AspectRatioFitter aspectFitter = tile.GetComponent<AspectRatioFitter>();
+            if (aspectFitter != null) aspectFitter.enabled = false;
+
+            // Đổi cha về Slot (giữ nguyên vị trí thế giới để tính toán Move)
+            tile.transform.SetParent(slotTransform, true); 
+
+            rectT.anchorMin = new Vector2(0.5f, 0.5f);
+            rectT.anchorMax = new Vector2(0.5f, 0.5f);
+            rectT.pivot = new Vector2(0.5f, 0.5f);
+            rectT.sizeDelta = sizeBefore;
+            rectT.localScale = scaleBefore;
+            
+            // Đảm bảo Tile nằm trên cùng của Slot để không bị che khuất
+            rectT.SetAsLastSibling();
+
+            if (UIEffectManager.Instance != null)
+            {
+                UIEffectManager.Instance.MoveTo(rectT, Vector2.zero, 0.25f);
+            }
+            else
+            {
+                // Fallback nếu manager lỗi: gán cứng vị trí để không bị lỗi "click xuyên"
+                rectT.anchoredPosition = Vector2.zero;
+            }
         }
 
         private void TrySpawnRemainderTileToConveyor()
@@ -269,9 +435,15 @@ namespace NumStrata.Gameplay
             spawnedTile.SetupRemainder(remainder, remainderSprite);
             spawnedTile.gameObject.name = $"Tile_Remainder_{remainder}_Slot_{slotIndex}";
             occupiedConveyorTiles[slotIndex] = spawnedTile;
+
+            // Hiệu ứng Pop-in cho Tile mới trên conveyor
+            if (UIEffectManager.Instance != null)
+            {
+                UIEffectManager.Instance.ScaleUp(spawnedTile.transform, 0.3f);
+            }
         }
 
-        private bool TryGetNextConveyorSlot(out Transform slot, out int index)
+        public bool TryGetNextConveyorSlot(out Transform slot, out int index)
         {
             slot = null;
             index = -1;
@@ -292,6 +464,14 @@ namespace NumStrata.Gameplay
             }
 
             return false;
+        }
+
+        public void RegisterTileToConveyor(Tile tile, int index)
+        {
+            if (index >= 0 && index < occupiedConveyorTiles.Length)
+            {
+                occupiedConveyorTiles[index] = tile;
+            }
         }
 
         private Tile GetRandomBoardTileTemplate()

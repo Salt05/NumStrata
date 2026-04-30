@@ -2,13 +2,14 @@ using UnityEngine;
 using UnityEngine.UI;
 using UnityEngine.EventSystems;
 using System.Collections.Generic;
+using NumStrata.Utils;
 
 namespace NumStrata.Gameplay
 {
     /// <summary>
     /// Thuộc tính quy định loại của Tile (Số, Phép toán, hoặc Ẩn Số)
     /// </summary>
-    public enum TileType { Number, Operator, Mystery, Remainder }
+    public enum TileType { Number, Operator, Mystery, Remainder, Helper }
 
     /// <summary>
     /// Chức năng: Đại diện cho một viên Tile duy nhất trên Board game.
@@ -36,6 +37,13 @@ namespace NumStrata.Gameplay
         public Image backgroundRenderer; // Dùng để hiển thị hình nền và nội dung của Tile
         public GameObject mysteryOverlay; // Lớp phủ dấu "?" 
         public bool isAssigned; // đã gán giá trị/phiên bản chưa
+
+        private RectTransform rectTransform;
+
+        private void Awake()
+        {
+            rectTransform = GetComponent<RectTransform>();
+        }
 
         /// <summary>
         /// Khởi tạo Tile mang giá trị là Con Số. Gán hình ảnh tương ứng.
@@ -186,34 +194,35 @@ namespace NumStrata.Gameplay
         /// </summary>
         public void OnPointerClick(PointerEventData eventData)
         {
+            if (type == TileType.Helper)
+            {
+                if (HelperManager.Instance != null)
+                {
+                    HelperManager.Instance.OnHelperTileClicked(this);
+                }
+                return;
+            }
+
             // Nếu Tile đang bị đè lên (khóa), bỏ qua lượt click này
             if (isLocked)
-            {
+{
                 Debug.Log($"[Tile] {gameObject.name} đang bị khóa và không thể click.");
                 return;
             }
 
-            // Gọi hệ thống FormulaManager để thử đẩy Tile này vào slot trên thanh công thức
+            // Gửi tín hiệu lên đầu não (FormulaManager)
             if (FormulaManager.Instance != null)
             {
-                bool success = FormulaManager.Instance.TryAddTile(this);
-                if (success)
+                // Nếu đầu não phê duyệt (cho phép placement)
+                bool approved = FormulaManager.Instance.RequestTilePlacement(this);
+                
+                if (approved)
                 {
-                    // Nếu đẩy thành công, tắt tính năng nhận click của Tile này
+                    // Chỉ khi được phê duyệt mới tắt tương tác click
                     if (backgroundRenderer != null)
                     {
                         backgroundRenderer.raycastTarget = false;
                     }
-
-                    // Mở khóa cho các tile bị nó đè lên
-                    foreach (var tileBelow in coveredTiles)
-                    {
-                        if (tileBelow != null)
-                        {
-                            tileBelow.RemoveCoveringTile(this);
-                        }
-                    }
-                    coveredTiles.Clear();
                 }
             }
             else
@@ -221,5 +230,22 @@ namespace NumStrata.Gameplay
                 Debug.LogWarning("[Tile] FormulaManager.Instance không có dữ liệu. Bạn đã đưa script FormulaManager vào scene chưa?");
             }
         }
-    }
-}
+
+        /// <summary>
+        /// Giải phóng các Tile bị Tile này đè lên. 
+        /// Chỉ được gọi từ FormulaManager khi Tile chính thức được chấp nhận vào Slot.
+        /// </summary>
+        public void ResolveOverlapOnAccept()
+        {
+            foreach (var tileBelow in coveredTiles)
+            {
+                if (tileBelow != null)
+                {
+                    tileBelow.RemoveCoveringTile(this);
+                }
+            }
+            coveredTiles.Clear();
+        }
+        }
+        }
+
