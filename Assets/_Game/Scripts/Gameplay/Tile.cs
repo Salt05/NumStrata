@@ -23,6 +23,7 @@ namespace NumStrata.Gameplay
         public int numberValue;
         public string operatorValue;
         public bool isLocked;
+        public bool isMystery;
 
         [Header("Position")]
         public int layerId;
@@ -52,6 +53,7 @@ namespace NumStrata.Gameplay
         {
             type = TileType.Number;
             numberValue = value;
+            operatorValue = string.Empty;
             isAssigned = true;
 
             if (backgroundRenderer == null)
@@ -67,10 +69,7 @@ namespace NumStrata.Gameplay
 
             backgroundRenderer.sprite = numberSprite; // Cập nhật hình ảnh số
 
-            if (mysteryOverlay != null)
-            {
-                mysteryOverlay.SetActive(false); // Tắt lớp ẩn số
-            }
+            SetMysteryMask(false);
         }
 
         /// <summary>
@@ -81,6 +80,7 @@ namespace NumStrata.Gameplay
         {
             type = TileType.Remainder;
             numberValue = value;
+            operatorValue = string.Empty;
             isAssigned = true;
 
             if (backgroundRenderer == null)
@@ -97,10 +97,7 @@ namespace NumStrata.Gameplay
             backgroundRenderer.sprite = numberSprite;
             backgroundRenderer.color = Color.white;
 
-            if (mysteryOverlay != null)
-            {
-                mysteryOverlay.SetActive(false);
-            }
+            SetMysteryMask(false);
         }
 
         /// <summary>
@@ -110,6 +107,7 @@ namespace NumStrata.Gameplay
         {
             type = TileType.Operator;
             operatorValue = op;
+            numberValue = 0;
             isAssigned = true;
 
             if (backgroundRenderer == null)
@@ -125,36 +123,23 @@ namespace NumStrata.Gameplay
 
             backgroundRenderer.sprite = operatorSprite; // Cập nhật hình phép toán
 
-            if (mysteryOverlay != null)
-            {
-                mysteryOverlay.SetActive(false); // Tắt lớp ẩn số
-            }
+            SetMysteryMask(false);
         }
 
-        /// <summary>
-        /// Khởi tạo Tile dạng Ẩn Số (Mystery - người chơi không biết bên dưới là gì).
-        /// </summary>
-        public void SetupMystery(Sprite mysterySprite)
+        public void SetMysteryMask(bool mask)
         {
-            type = TileType.Mystery;
-            isAssigned = true;
-
-            if (backgroundRenderer == null)
-            {
-                Debug.LogError($"[Tile] Thiếu backgroundRenderer ở {name}", this);
-                return;
-            }
-
-            if (mysterySprite == null)
-            {
-                Debug.LogError($"[Tile] Không tìm thấy hình ảnh dấu hỏi ở {name}", this);
-            }
-
-            backgroundRenderer.sprite = mysterySprite;
-
+            isMystery = mask;
             if (mysteryOverlay != null)
             {
-                mysteryOverlay.SetActive(true); // Bật lớp ẩn số (Dấu chấm hỏi)
+                mysteryOverlay.SetActive(mask);
+                if (mask)
+                {
+                    UnityEngine.UI.Image overlayImage = mysteryOverlay.GetComponent<UnityEngine.UI.Image>();
+                    if (overlayImage != null)
+                    {
+                        overlayImage.color = isLocked ? new Color32(103, 103, 103, 255) : Color.white;
+                    }
+                }
             }
         }
 
@@ -164,10 +149,40 @@ namespace NumStrata.Gameplay
         public void SetVisualState(bool unlocked)
         {
             isLocked = !unlocked;
+            Color targetColor = unlocked ? Color.white : new Color32(103, 103, 103, 255);
+
             if (backgroundRenderer != null)
             {
-                // Màu #676767 tương đương (103/255, 103/255, 103/255)
-                backgroundRenderer.color = unlocked ? Color.white : new Color32(103, 103, 103, 255);
+                backgroundRenderer.color = targetColor;
+            }
+
+            if (mysteryOverlay != null)
+            {
+                UnityEngine.UI.Image overlayImage = mysteryOverlay.GetComponent<UnityEngine.UI.Image>();
+                if (overlayImage != null)
+                {
+                    overlayImage.color = targetColor;
+                }
+            }
+        }
+
+        public void SetDimmed(bool isDimmed)
+        {
+            if (backgroundRenderer != null)
+            {
+                Color c = backgroundRenderer.color;
+                c.a = isDimmed ? 0.4f : 1f;
+                backgroundRenderer.color = c;
+            }
+            if (mysteryOverlay != null)
+            {
+                UnityEngine.UI.Image overlayImage = mysteryOverlay.GetComponent<UnityEngine.UI.Image>();
+                if (overlayImage != null)
+                {
+                    Color c = overlayImage.color;
+                    c.a = isDimmed ? 0.4f : 1f;
+                    overlayImage.color = c;
+                }
             }
         }
 
@@ -203,16 +218,32 @@ namespace NumStrata.Gameplay
                 return;
             }
 
+            if (HelperManager.Instance != null && HelperManager.Instance.isDeleteActive)
+            {
+                if (!isLocked)
+                {
+                    HelperManager.Instance.ExecuteTileDeletion(this);
+                }
+                return;
+            }
+
             // Nếu Tile đang bị đè lên (khóa), bỏ qua lượt click này
             if (isLocked)
-{
+            {
                 Debug.Log($"[Tile] {gameObject.name} đang bị khóa và không thể click.");
                 return;
+            }
+
+            // Lột mặt nạ Mystery
+            if (isMystery)
+            {
+                SetMysteryMask(false);
             }
 
             // Gửi tín hiệu lên đầu não (FormulaManager)
             if (FormulaManager.Instance != null)
             {
+
                 // Nếu đầu não phê duyệt (cho phép placement)
                 bool approved = FormulaManager.Instance.RequestTilePlacement(this);
                 
@@ -246,6 +277,6 @@ namespace NumStrata.Gameplay
             }
             coveredTiles.Clear();
         }
-        }
-        }
+    }
+}
 

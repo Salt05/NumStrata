@@ -14,6 +14,8 @@ namespace NumStrata.Gameplay
         [Header("UI Structure")]
         public GameObject helperDimmer;
         public GameObject helperSpawnPopup;
+        public Transform[] operatorSlots;
+        public Transform[] numberSlots;
 
         [Header("Buttons")]
         public Button btnSpawnGroup;
@@ -38,8 +40,7 @@ namespace NumStrata.Gameplay
 
         // State
         private bool isSpawnActive = false;
-        private bool isShuffleActive = false;
-        private bool isDeleteActive = false;
+        public bool isDeleteActive = false;
         private bool isSignNegative = false;
 
         private Sprite defaultSpawnIcon;
@@ -60,32 +61,130 @@ namespace NumStrata.Gameplay
                 return;
             }
 
-            // Save default icons
-            if (imgSpawnIcon != null) defaultSpawnIcon = imgSpawnIcon.sprite;
-            if (imgShuffleIcon != null) defaultShuffleIcon = imgShuffleIcon.sprite;
-            if (imgDeleteIcon != null) defaultDeleteIcon = imgDeleteIcon.sprite;
-
-            // Add listeners
-            if (btnSpawnGroup != null) btnSpawnGroup.onClick.AddListener(ToggleSpawn);
-            if (btnShuffleGroup != null) btnShuffleGroup.onClick.AddListener(ToggleShuffle);
-            if (btnDeleteGroup != null) btnDeleteGroup.onClick.AddListener(ToggleDelete);
-            if (btnReturnGroup != null) btnReturnGroup.onClick.AddListener(ExecuteReturn);
-            if (btnToggleSign != null) btnToggleSign.onClick.AddListener(ToggleSign);
-
-            // Initialize UI
+            // Initialize UI state
             if (helperDimmer != null) helperDimmer.SetActive(false);
             if (helperSpawnPopup != null) helperSpawnPopup.SetActive(false);
         }
 
         private void Start()
         {
-            if (helperSpawnPopup != null)
+            // 1. Lưu trữ icon gốc để dùng khi Reset
+            if (imgSpawnIcon != null) defaultSpawnIcon = imgSpawnIcon.sprite;
+            if (imgShuffleIcon != null) defaultShuffleIcon = imgShuffleIcon.sprite;
+            if (imgDeleteIcon != null) defaultDeleteIcon = imgDeleteIcon.sprite;
+
+            // 2. Chỉ đăng ký listener một lần duy nhất ở đây
+            if (btnSpawnGroup != null)
             {
-                popupTiles.AddRange(helperSpawnPopup.GetComponentsInChildren<Tile>(true));
-                foreach (var tile in popupTiles)
+                btnSpawnGroup.onClick.RemoveAllListeners(); // Xóa sạch để tránh bị gán chồng hoặc gán từ Inspector
+                btnSpawnGroup.onClick.AddListener(ToggleSpawn);
+            }
+            if (btnShuffleGroup != null)
+            {
+                btnShuffleGroup.onClick.RemoveAllListeners();
+                btnShuffleGroup.onClick.AddListener(ExecuteShuffle);
+            }
+            if (btnDeleteGroup != null)
+            {
+                btnDeleteGroup.onClick.RemoveAllListeners();
+                btnDeleteGroup.onClick.AddListener(ToggleDelete);
+            }
+            if (btnReturnGroup != null)
+            {
+                btnReturnGroup.onClick.RemoveAllListeners();
+                btnReturnGroup.onClick.AddListener(ExecuteReturn);
+            }
+            if (btnToggleSign != null)
+            {
+                btnToggleSign.onClick.RemoveAllListeners();
+                btnToggleSign.onClick.AddListener(ToggleSign);
+            }
+            
+            // 3. Khởi tạo nội dung Popup
+            StartCoroutine(InitializeHelperPopupRoutine());
+        }
+
+        private IEnumerator InitializeHelperPopupRoutine()
+        {
+            yield return new WaitForEndOfFrame();
+
+            // 1. Thiết lập cho Operator Slots
+            SetupHelperGridSlots(operatorSlots);
+
+            // 2. Thiết lập cho Number Slots
+            SetupHelperGridSlots(numberSlots);
+
+            Debug.Log("[HelperManager] Khởi tạo Helper Popup thành công.");
+        }
+
+        private void SetupHelperGridSlots(Transform[] slots)
+        {
+            if (slots == null) return;
+
+            foreach (Transform slot in slots)
+            {
+                if (slot == null) continue;
+
+                // Xóa Tile cũ nếu có
+                foreach (Transform child in slot) Destroy(child.gameObject);
+
+                Tile template = FormulaManager.Instance.GetRandomBoardTileTemplate();
+                if (template == null) continue;
+
+                // 2. Instantiate Tile mẫu làm con của Slot với worldPositionStays: false
+                GameObject cloneObj = Instantiate(template.gameObject, slot, false);
+                cloneObj.name = $"Tile_{slot.name}";
+                
+                Tile tile = cloneObj.GetComponent<Tile>();
+                RectTransform rectT = cloneObj.GetComponent<RectTransform>();
+
+                // 3. Thiết lập thuộc tính chuẩn
+                AspectRatioFitter aspectFitter = cloneObj.GetComponent<AspectRatioFitter>();
+                if (aspectFitter != null) aspectFitter.enabled = false;
+
+                rectT.anchorMin = new Vector2(0.5f, 0.5f);
+                rectT.anchorMax = new Vector2(0.5f, 0.5f);
+                rectT.pivot = new Vector2(0.5f, 0.5f);
+                rectT.localScale = Vector3.one; // Reset localScale về (1, 1, 1)
+
+                // 4. Gán sizeDelta bằng đúng rect.size của Tile mẫu
+                rectT.sizeDelta = template.GetComponent<RectTransform>().rect.size;
+                rectT.anchoredPosition = Vector2.zero;
+
+                // Logic Helper
+                tile.type = TileType.Helper;
+                tile.isLocked = false;
+                if (tile.backgroundRenderer != null)
                 {
-                    tile.type = TileType.Helper;
+                    tile.backgroundRenderer.raycastTarget = true;
+                    tile.backgroundRenderer.color = Color.white;
                 }
+
+                // 5. Đổi giá trị và Sprite
+                ConfigureHelperTile(tile, slot.name);
+                tile.type = TileType.Helper; // Đảm bảo giữ type Helper
+                
+                popupTiles.Add(tile);
+            }
+        }
+
+        private void ConfigureHelperTile(Tile tile, string slotName)
+        {
+            if (tileSpriteData == null) return;
+
+            // Ví dụ: slotName = "Num_5" hoặc "Tile_Helper_+"
+            if (slotName.StartsWith("Num_"))
+            {
+                string valStr = slotName.Replace("Num_", "");
+                if (int.TryParse(valStr, out int val))
+                {
+                    tile.SetupNumber(val, tileSpriteData.GetNumberSprite(val));
+                }
+            }
+            else if (slotName.StartsWith("Tile_Helper_"))
+            {
+                string op = slotName.Replace("Tile_Helper_", "");
+                tile.SetupOperator(op, tileSpriteData.GetOperatorSprite(op));
             }
         }
 
@@ -95,23 +194,19 @@ namespace NumStrata.Gameplay
             
             if (isSpawnActive)
             {
-                // Reset states of other helpers
-                if (isShuffleActive) ToggleShuffle();
+                // Tắt các trợ giúp khác nếu đang bật
                 if (isDeleteActive) ToggleDelete();
 
+                // Đổi icon sang nút Hủy
                 if (imgSpawnIcon != null && helperIconCancel != null) imgSpawnIcon.sprite = helperIconCancel;
+                
+                // Hiện lớp nền mờ (Popup_Layer) và Popup
                 if (helperDimmer != null) helperDimmer.SetActive(true);
                 if (helperSpawnPopup != null) 
                 {
                     helperSpawnPopup.SetActive(true);
                     if (UIEffectManager.Instance != null)
-                    {
                         UIEffectManager.Instance.ScaleUp(helperSpawnPopup.transform, 0.25f);
-                    }
-                    else
-                    {
-                        helperSpawnPopup.transform.localScale = Vector3.one;
-                    }
                 }
             }
             else
@@ -123,13 +218,15 @@ namespace NumStrata.Gameplay
         private void CloseSpawnPopup()
         {
             isSpawnActive = false;
+            // Trả lại icon gốc
             if (imgSpawnIcon != null && defaultSpawnIcon != null) imgSpawnIcon.sprite = defaultSpawnIcon;
             
-            if (helperSpawnPopup != null && UIEffectManager.Instance != null)
+            if (helperSpawnPopup != null && helperSpawnPopup.activeSelf && UIEffectManager.Instance != null)
             {
                 UIEffectManager.Instance.ScaleDown(helperSpawnPopup.transform, 0.2f, () => 
                 {
                     if (helperSpawnPopup != null) helperSpawnPopup.SetActive(false);
+                    // Chỉ tắt lớp nền sau khi hiệu ứng thu nhỏ popup xong
                     if (helperDimmer != null) helperDimmer.SetActive(false);
                 });
             }
@@ -158,14 +255,14 @@ namespace NumStrata.Gameplay
 
             foreach (var tile in popupTiles)
             {
-                // Only update if it's not an operator
+                // Chỉ cập nhật các Tile số
                 if (string.IsNullOrEmpty(tile.operatorValue))
                 {
-                    int absValue = Mathf.Abs(tile.numberValue);
-                    int newValue = isSignNegative ? -absValue : absValue;
-                    tile.numberValue = newValue;
+                    // Cập nhật giá trị (đổi dấu)
+                    tile.numberValue *= -1;
                     
-                    Sprite newSprite = tileSpriteData.GetNumberSprite(newValue);
+                    // Cập nhật Sprite tương ứng
+                    Sprite newSprite = tileSpriteData.GetNumberSprite(tile.numberValue);
                     if (newSprite != null)
                     {
                         tile.backgroundRenderer.sprite = newSprite;
@@ -177,51 +274,56 @@ namespace NumStrata.Gameplay
         public void OnHelperTileClicked(Tile clickedTile)
         {
             if (!isSpawnActive) return;
+            isSpawnActive = false;
 
             if (FormulaManager.Instance == null) return;
 
-            if (!FormulaManager.Instance.TryGetNextConveyorSlot(out Transform slot, out int index))
+            if (FormulaManager.Instance.TryGetNextConveyorSlot(out Transform slot, out int index))
             {
-                Debug.LogWarning("[HelperManager] Conveyor đầy, không thể spawn!");
-                return;
-            }
+                // 1. Lưu lại Vị trí thế giới (World Position) hiện tại
+                Vector3 worldPos = clickedTile.transform.position;
 
-            // Clone tile
-            GameObject clonedObj = Instantiate(clickedTile.gameObject, clickedTile.transform.position, clickedTile.transform.rotation, helperSpawnPopup.transform.parent);
-            Tile spawnedTile = clonedObj.GetComponent<Tile>();
-            
-            // Set type back to normal
-            if (!string.IsNullOrEmpty(clickedTile.operatorValue))
-            {
-                spawnedTile.type = TileType.Operator;
-                spawnedTile.operatorValue = clickedTile.operatorValue;
-            }
-            else
-            {
-                spawnedTile.type = TileType.Number;
-                spawnedTile.numberValue = clickedTile.numberValue;
-            }
+                // Tạo bản sao để di chuyển (giữ popup nguyên vẹn)
+                GameObject clonedObj = Instantiate(clickedTile.gameObject);
+                Tile spawnedTile = clonedObj.GetComponent<Tile>();
+                RectTransform rectT = spawnedTile.GetComponent<RectTransform>();
 
-            spawnedTile.isLocked = false;
-if (spawnedTile.backgroundRenderer != null)
-            {
-                spawnedTile.backgroundRenderer.raycastTarget = true;
-                spawnedTile.backgroundRenderer.color = Color.white;
-            }
+                // Chuyển từ trạng thái Helper sang Tile thật
+                if (!string.IsNullOrEmpty(clickedTile.operatorValue))
+                {
+                    spawnedTile.type = TileType.Operator;
+                    spawnedTile.SetupOperator(clickedTile.operatorValue, clickedTile.backgroundRenderer.sprite);
+                }
+                else
+                {
+                    spawnedTile.type = TileType.Number;
+                    spawnedTile.SetupNumber(clickedTile.numberValue, clickedTile.backgroundRenderer.sprite);
+                }
 
-            // Register to conveyor
-            FormulaManager.Instance.RegisterTileToConveyor(spawnedTile, index);
+                // 3. Gán cha của Tile sang Slot Conveyor ngay lập tức (worldPositionStays: false)
+                rectT.SetParent(slot, false);
 
-            // Move clone to conveyor
-            spawnedTile.transform.SetParent(slot, true);
-            RectTransform rectT = spawnedTile.GetComponent<RectTransform>();
-            if (rectT != null)
-            {
-                rectT.anchorMin = new Vector2(0.5f, 0.5f);
-                rectT.anchorMax = new Vector2(0.5f, 0.5f);
-                rectT.pivot = new Vector2(0.5f, 0.5f);
-                rectT.SetAsLastSibling();
+                // 4. Reset localScale về (1, 1, 1) ngay lập tức
+                rectT.localScale = Vector3.one;
 
+                // 5. Gán lại Vị trí thế giới về vị trí cũ đã lưu
+                rectT.position = worldPos;
+
+                // Đăng ký logic vào FormulaManager
+                FormulaManager.Instance.RegisterTileToConveyor(spawnedTile, index);
+
+                // 6. Gọi đồng thời
+                if (imgSpawnIcon != null && defaultSpawnIcon != null) imgSpawnIcon.sprite = defaultSpawnIcon;
+                if (helperSpawnPopup != null && UIEffectManager.Instance != null)
+                {
+                    UIEffectManager.Instance.ScaleDown(helperSpawnPopup.transform, 0.3f, () => 
+                    {
+                        if (helperSpawnPopup != null) helperSpawnPopup.SetActive(false);
+                        if (helperDimmer != null) helperDimmer.SetActive(false);
+                    });
+                }
+
+                // Move về tâm Slot (0,0)
                 if (UIEffectManager.Instance != null)
                 {
                     UIEffectManager.Instance.MoveTo(rectT, Vector2.zero, 0.3f);
@@ -231,24 +333,89 @@ if (spawnedTile.backgroundRenderer != null)
                     rectT.anchoredPosition = Vector2.zero;
                 }
             }
-
-            // Close popup
-            CloseSpawnPopup();
-        }
-
-        private void ToggleShuffle()
-        {
-            isShuffleActive = !isShuffleActive;
-            if (isShuffleActive)
-            {
-                if (isSpawnActive) ToggleSpawn();
-                if (isDeleteActive) ToggleDelete();
-
-                if (imgShuffleIcon != null && helperIconCancel != null) imgShuffleIcon.sprite = helperIconCancel;
-            }
             else
             {
-                if (imgShuffleIcon != null && defaultShuffleIcon != null) imgShuffleIcon.sprite = defaultShuffleIcon;
+                CloseSpawnPopup();
+            }
+        }
+
+        private struct TileData
+        {
+            public TileType type;
+            public int numberValue;
+            public string operatorValue;
+            public Sprite sprite;
+            public bool isMystery;
+        }
+
+        private void ExecuteShuffle()
+        {
+            LevelLoader levelLoader = FindObjectOfType<LevelLoader>();
+            if (levelLoader == null) return;
+
+            List<Tile> activeTiles = levelLoader.GetActiveBoardTiles();
+            if (activeTiles == null || activeTiles.Count <= 1) return;
+
+            // Bước 1: Thu thập dữ liệu
+            List<TileData> tileDataList = new List<TileData>();
+            foreach (Tile tile in activeTiles)
+            {
+                tileDataList.Add(new TileData
+                {
+                    type = tile.type,
+                    numberValue = tile.numberValue,
+                    operatorValue = tile.operatorValue,
+                    sprite = tile.backgroundRenderer != null ? tile.backgroundRenderer.sprite : null,
+                    isMystery = tile.isMystery
+                });
+            }
+
+            // Bước 2: Xáo trộn (Fisher-Yates)
+            for (int i = 0; i < tileDataList.Count; i++)
+            {
+                int randomIndex = UnityEngine.Random.Range(i, tileDataList.Count);
+                TileData temp = tileDataList[i];
+                tileDataList[i] = tileDataList[randomIndex];
+                tileDataList[randomIndex] = temp;
+            }
+
+            // Bước 3 & 4: Hiệu ứng Chaos Fly và Tráo đổi
+            for (int i = 0; i < activeTiles.Count; i++)
+            {
+                Tile tile = activeTiles[i];
+                TileData data = tileDataList[i];
+                RectTransform rect = tile.GetComponent<RectTransform>();
+
+                // Tính toán vị trí ngẫu nhiên
+                Vector2 randomPos = UnityEngine.Random.insideUnitCircle * 300f;
+
+                if (UIEffectManager.Instance != null)
+                {
+                    // Bay ra
+                    UIEffectManager.Instance.MoveTo(rect, randomPos, 0.2f, () =>
+                    {
+                        // Gán lại dữ liệu sau khi bay ra
+                        if (data.type == TileType.Operator)
+                        {
+                            tile.SetupOperator(data.operatorValue, data.sprite);
+                        }
+                        else
+                        {
+                            tile.SetupNumber(data.numberValue, data.sprite);
+                        }
+                        tile.SetMysteryMask(data.isMystery);
+
+                        // Bay về tâm của Slot cũ
+                        UIEffectManager.Instance.MoveTo(rect, Vector2.zero, 0.3f, () =>
+                        {
+                            // Cập nhật độ sáng tối theo đúng logic đè lớp
+                            tile.SetVisualState(tile.coveringTiles.Count == 0);
+                            
+                            // Hiệu ứng Scale nhẹ (1.2 -> 1.0) để tạo cảm giác "vừa hạ cánh"
+                            UIEffectManager.Instance.ScaleUp(tile.transform, 0.2f, 1.2f);
+                        });
+                    });
+                }
             }
         }
 
@@ -258,7 +425,6 @@ if (spawnedTile.backgroundRenderer != null)
             if (isDeleteActive)
             {
                 if (isSpawnActive) ToggleSpawn();
-                if (isShuffleActive) ToggleShuffle();
 
                 if (imgDeleteIcon != null && helperIconCancel != null) imgDeleteIcon.sprite = helperIconCancel;
             }
@@ -266,12 +432,189 @@ if (spawnedTile.backgroundRenderer != null)
             {
                 if (imgDeleteIcon != null && defaultDeleteIcon != null) imgDeleteIcon.sprite = defaultDeleteIcon;
             }
+
+            // Bật/tắt khả năng click cho các Tile trên Formula Bar
+            if (FormulaManager.Instance != null)
+            {
+                foreach (Tile tile in FormulaManager.Instance.occupiedTiles)
+                {
+                    if (tile != null && tile.backgroundRenderer != null)
+                    {
+                        tile.backgroundRenderer.raycastTarget = isDeleteActive;
+                    }
+                }
+            }
+        }
+
+        public void ExecuteTileDeletion(Tile tile)
+        {
+            if (tile == null) return;
+
+            bool isRemoved = false;
+
+            if (FormulaManager.Instance != null)
+            {
+                // Kiểm tra trên Conveyor
+                for (int i = 0; i < FormulaManager.Instance.occupiedConveyorTiles.Length; i++)
+                {
+                    if (FormulaManager.Instance.occupiedConveyorTiles[i] == tile)
+                    {
+                        FormulaManager.Instance.occupiedConveyorTiles[i] = null;
+                        FormulaManager.Instance.ShiftConveyorTiles();
+                        isRemoved = true;
+                        break;
+                    }
+                }
+
+                // Kiểm tra trên Formula Bar
+                if (!isRemoved)
+                {
+                    for (int i = 0; i < FormulaManager.Instance.occupiedTiles.Length; i++)
+                    {
+                        if (FormulaManager.Instance.occupiedTiles[i] == tile)
+                        {
+                            FormulaManager.Instance.occupiedTiles[i] = null;
+                            isRemoved = true;
+                            break;
+                        }
+                    }
+                }
+            }
+
+            if (!isRemoved)
+            {
+                // Tile nằm trên Board
+                tile.ResolveOverlapOnAccept();
+                LevelLoader loader = FindObjectOfType<LevelLoader>();
+                if (loader != null && loader.allSpawnedTiles.Contains(tile))
+                {
+                    loader.allSpawnedTiles.Remove(tile);
+                }
+            }
+
+            if (tile.backgroundRenderer != null)
+            {
+                tile.backgroundRenderer.raycastTarget = false;
+            }
+
+            if (UIEffectManager.Instance != null)
+            {
+                UIEffectManager.Instance.ScaleDown(tile.transform, 0.2f, () =>
+                {
+                    if (tile != null) Destroy(tile.gameObject);
+                });
+            }
+            else
+            {
+                Destroy(tile.gameObject);
+            }
+
+            // Tắt chế độ xóa sau khi xóa thành công 1 tile
+            ToggleDelete();
         }
 
         private void ExecuteReturn()
         {
-            // Execute return immediately
-            Debug.Log("[HelperManager] Return executed");
+            if (FormulaManager.Instance == null) return;
+
+            // Bước 1: Kiểm tra dung lượng Conveyor
+            List<int> availableConveyorIndices = new List<int>();
+            for (int i = 0; i < FormulaManager.Instance.occupiedConveyorTiles.Length; i++)
+            {
+                if (FormulaManager.Instance.occupiedConveyorTiles[i] == null)
+                {
+                    availableConveyorIndices.Add(i);
+                }
+            }
+
+            if (availableConveyorIndices.Count == 0)
+            {
+                Debug.Log("[HelperManager] Conveyor is full, cannot return tiles.");
+                return;
+            }
+
+            // Bước 2: Xác định Tile mục tiêu
+            List<int> occupiedFormulaIndices = FormulaManager.Instance.GetOccupiedFormulaIndicesRightToLeft();
+            if (occupiedFormulaIndices.Count == 0)
+            {
+                Debug.Log("[HelperManager] Formula bar is empty, nothing to return.");
+                return;
+            }
+
+            int returnCount = Mathf.Min(availableConveyorIndices.Count, occupiedFormulaIndices.Count);
+
+            // Lấy ra đúng số lượng Tile sẽ rút về (ưu tiên từ phải sang trái)
+            List<int> targetFormulaIndices = occupiedFormulaIndices.GetRange(0, returnCount);
+            
+            // Đảo ngược danh sách vừa lấy để trở lại thứ tự từ trái sang phải.
+            // Nhờ đó, khi xếp lên Conveyor, Tile nằm bên trái công thức sẽ vào ô bên trái của Conveyor.
+            targetFormulaIndices.Reverse();
+
+            // Bước 3: Thực hiện di chuyển
+            for (int i = 0; i < returnCount; i++)
+            {
+                int fIdx = targetFormulaIndices[i];
+                int cIdx = availableConveyorIndices[i];
+
+                Tile tile = FormulaManager.Instance.occupiedTiles[fIdx];
+                if (tile == null) continue;
+
+                // Cập nhật logic ngay lập tức
+                FormulaManager.Instance.occupiedConveyorTiles[cIdx] = tile;
+                FormulaManager.Instance.occupiedTiles[fIdx] = null;
+
+                // Hiệu ứng "Hút ngược" (Juice)
+                RectTransform rectT = tile.GetComponent<RectTransform>();
+                Transform targetSlot = FormulaManager.Instance.conveyorSlots[cIdx];
+
+                if (rectT != null && targetSlot != null)
+                {
+                    if (tile.backgroundRenderer != null)
+                    {
+                        tile.backgroundRenderer.raycastTarget = false; // Tạm tắt click khi đang bay
+                    }
+
+                    // Tính toán tọa độ đích tương đối với lớp cha CŨ (Formula Slot)
+                    Vector3 startWorldPos = rectT.position;
+                    rectT.position = targetSlot.position;
+                    Vector2 targetAnchoredPos = rectT.anchoredPosition;
+                    rectT.position = startWorldPos; // Trả về vị trí ban đầu
+
+                    if (UIEffectManager.Instance != null)
+                    {
+                        Vector2 currentPos = rectT.anchoredPosition;
+                        Vector2 upPos = currentPos + new Vector2(0, 50f);
+
+                        // Bay lên 1 chút (offset y + 50)
+                        UIEffectManager.Instance.MoveTo(rectT, upPos, 0.1f, () =>
+                        {
+                            // Sau đó bay về đích (VẪN ĐANG Ở LỚP CHA CŨ ĐỂ KHÔNG BỊ CHE)
+                            UIEffectManager.Instance.MoveTo(rectT, targetAnchoredPos, 0.25f, () =>
+                            {
+                                // HẠ CÁNH XONG MỚI ĐỔI LỚP CHA
+                                rectT.SetParent(targetSlot, true); 
+                                rectT.localScale = Vector3.one;
+                                rectT.anchoredPosition = Vector2.zero; // Đảm bảo nằm ngay tâm
+
+                                if (tile.backgroundRenderer != null)
+                                {
+                                    tile.backgroundRenderer.raycastTarget = true;
+                                }
+                            });
+                        });
+                    }
+                    else
+                    {
+                        rectT.SetParent(targetSlot, false);
+                        rectT.localScale = Vector3.one;
+                        rectT.anchoredPosition = Vector2.zero;
+                        if (tile.backgroundRenderer != null)
+                        {
+                            tile.backgroundRenderer.raycastTarget = true;
+                        }
+                    }
+                }
+            }
         }
     }
 }

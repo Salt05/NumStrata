@@ -53,8 +53,9 @@ namespace NumStrata.Gameplay
         public TileSpriteData tileSpriteData;
 
         private List<string> pool;
+        public List<Equation> ParsedEquations => parsedEquations;
         private List<Equation> parsedEquations;
-        private List<Tile> allSpawnedTiles = new List<Tile>();
+        public List<Tile> allSpawnedTiles = new List<Tile>();
         private Dictionary<Tile, int> tileDebugIds = new Dictionary<Tile, int>();
 
         [Header("Generation Settings")]
@@ -134,7 +135,41 @@ namespace NumStrata.Gameplay
             // 7. Smart Populate Values (Rải giá trị từ Pool vào Cây để tránh Deadlock)
             SmartPopulateValues();
 
+            // 8. Rải mặt nạ Mystery
+            ApplyMysteryMasks(inventory.mysteryCount);
+
             Debug.Log("[LevelLoader] Level load completed.");
+        }
+
+        private void ApplyMysteryMasks(int count)
+        {
+            if (count <= 0) return;
+
+            List<Tile> candidates = new List<Tile>();
+            foreach (Tile t in allSpawnedTiles)
+            {
+                if (t.isAssigned && t.type != TileType.Helper && !t.isMystery)
+                {
+                    candidates.Add(t);
+                }
+            }
+
+            System.Random rnd = new System.Random();
+            for (int i = 0; i < candidates.Count; i++)
+            {
+                int r = rnd.Next(i, candidates.Count);
+                Tile tmp = candidates[i];
+                candidates[i] = candidates[r];
+                candidates[r] = tmp;
+            }
+
+            int applied = 0;
+            for (int i = 0; i < candidates.Count && i < count; i++)
+            {
+                candidates[i].SetMysteryMask(true);
+                applied++;
+            }
+            Debug.Log($"[LevelLoader] Đã áp dụng {applied} mặt nạ Mystery.");
         }
 
         private void GenerateOverlapTree()
@@ -524,11 +559,6 @@ namespace NumStrata.Gameplay
                 }
             }
 
-            for (int i = 0; i < inventory.mysteryCount; i++)
-            {
-                builtPool.Add("?");
-            }
-
             return builtPool;
         }
 
@@ -705,7 +735,7 @@ namespace NumStrata.Gameplay
             }
         }
 
-        private class Equation
+        public class Equation
         {
             public int a;
             public string op;
@@ -736,9 +766,7 @@ namespace NumStrata.Gameplay
         {
             tile.gameObject.name = $"Tile_{value}_{tile.layerId}_{tile.gridX}-{tile.gridY}";
 
-            if (value == "?")
-                tile.SetupMystery(tileSpriteData.mysterySprite);
-            else if (int.TryParse(value, out int num))
+            if (int.TryParse(value, out int num))
                 tile.SetupNumber(num, tileSpriteData.GetNumberSprite(num));
             else
             {
@@ -786,6 +814,19 @@ namespace NumStrata.Gameplay
 
             tileDebugIds[tile] = allSpawnedTiles.Count + 1;
             allSpawnedTiles.Add(tile);
+        }
+
+        public List<Tile> GetActiveBoardTiles()
+        {
+            List<Tile> activeTiles = new List<Tile>();
+            foreach (Tile tile in allSpawnedTiles)
+            {
+                if (tile != null && tile.transform.IsChildOf(boardBackground))
+                {
+                    activeTiles.Add(tile);
+                }
+            }
+            return activeTiles;
         }
 
         private string BuildSpawnTreeReport()

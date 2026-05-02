@@ -251,6 +251,46 @@ UX:
 | Delete  | Xóa vĩnh viễn 1 tile bất kỳ                  | 50               |
 | Spawn # | Sinh 1 number tile do người chơi chọn         | 100              |
 
+## 6.3 Chi tiết triển khai Helper (Implemented Logic)
+
+Hệ thống Helper đã được phát triển hoàn thiện và quản lý tập trung qua `HelperManager.cs` kết hợp với `UIEffectManager` để xử lý Animation.
+
+### 1. Helper_Spawn (Tạo Tile Mới)
+- **Nguyên lý:** Mở ra giao diện Popup cho phép người chơi chủ động chọn 1 Tile (Toán tử: +, -, x, / hoặc Số: 1-9).
+- **Phạm vi & Cách thức:**
+  - Hỗ trợ đổi dấu (Toggle Sign) cho phép đổi từ số dương sang âm và ngược lại trực tiếp trên giao diện.
+  - Khi chọn, hệ thống tạo ra một bản sao (Instantiate) của Tile đó và gán `TileType` tương ứng.
+  - Tile sau khi sinh sẽ lập tức bay về ô trống đầu tiên trên Băng chuyền (`Conveyor`).
+  - Logic xác định ô trống dựa vào `FormulaManager.Instance.TryGetNextConveyorSlot`.
+
+### 2. Helper_Shuffle (Xáo Trộn Bàn Chơi)
+- **Nguyên lý:** Lấy toàn bộ các Tile **hiện đang kích hoạt trên Board** (không tính trên Formula Bar hay Conveyor) và xáo trộn vị trí/giá trị.
+- **Phạm vi & Cách thức:**
+  - Sử dụng thuật toán **Fisher-Yates** để tráo đổi thuộc tính (`numberValue`, `operatorValue`, `Sprite`) của các Tile.
+  - **Animation (Chaos Fly):** Các Tile sẽ nổ tung bay tản ra xung quanh (`MoveTo` ra vị trí ngẫu nhiên) rồi lập tức bay về đúng vị trí Slot ban đầu với thuộc tính mới.
+  - **Bảo toàn Mystery:** Trạng thái "Mặt nạ" (`isMystery`) cũng được xáo trộn kèm theo dữ liệu, đảm bảo Tile ẩn không bị lộ giá trị.
+
+### 3. Helper_Return (Rút Lại Nước Đi)
+- **Nguyên lý:** Đưa các Tile vừa đẩy lên thanh công thức (`Formula Bar`) quay trở về băng chuyền (`Conveyor`).
+- **Phạm vi & Cách thức:**
+  - **LIFO (Last In First Out):** Rút các Tile từ phải sang trái (index 4 -> 0) trên Formula Bar.
+  - **Sắp xếp:** Đưa về Conveyor nhưng xếp lại đúng thứ tự trái sang phải ban đầu.
+  - **Cập nhật mảng Instant:** Dữ liệu mảng `occupiedTiles` và `occupiedConveyorTiles` được hoán đổi lập tức để chặn lỗi logic.
+  - **Clipping Fix (Juice):** Hiệu ứng bay bổng (`Y + 50`) thực hiện trong hệ tọa độ của lớp cha cũ (Panel_Equation). Chỉ khi bay xong (onComplete) mới gọi `SetParent` sang Conveyor để tránh Tile bị UI đè lấp.
+
+### 4. Helper_Delete (Phá Hủy Tile)
+- **Nguyên lý:** Xóa vĩnh viễn 1 Tile bất kỳ đang ở trạng thái Unlocked (sáng màu) khỏi màn chơi.
+- **Phạm vi & Cách thức:**
+  - **Hinting:** Khi kích hoạt, hệ thống sẽ tự động làm mờ (`SetDimmed`) các Tile đang bị khóa trên Board (alpha = 0.4) để người chơi dễ nhận biết mục tiêu hợp lệ.
+  - **Tương tác:** 
+    - Nếu click Tile bị khóa -> Rung lắc báo lỗi (`Shake`).
+    - Nếu click Tile hợp lệ -> Xóa.
+  - **Xử lý Xóa:**
+    - Nếu nằm trên **Board**: Gọi `ResolveOverlapOnAccept()` để lập tức mở khóa cho các Tile bị nó đè bên dưới.
+    - Nếu nằm trên **Conveyor**: Xóa mảng và gọi `ShiftConveyorTiles()` dồn hàng sang trái.
+    - Nếu nằm trên **Formula Bar**: Dọn trống mảng logic.
+  - Tự động tắt chế độ Delete và làm sáng lại bàn chơi sau khi xóa thành công 1 Tile.
+
 ---
 
 ## 7) Level Matrix Design (Thiết kế ma trận vị trí)

@@ -432,8 +432,8 @@ RectTransform:
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0, y: 1}
   m_AnchorMax: {x: 0, y: 1}
-  m_AnchoredPosition: {x: 552.14056, y: -103.416626}
-  m_SizeDelta: {x: 140.61159, y: 0}
+  m_AnchoredPosition: {x: 579.7483, y: -108.537895}
+  m_SizeDelta: {x: 148.49951, y: 0}
   m_Pivot: {x: 0.5, y: 0.5}
 --- !u!114 &16989154
 MonoBehaviour:
@@ -2721,7 +2721,7 @@ MonoBehaviour:
   m_faceColor:
     serializedVersion: 2
     rgba: 4294967295
-  m_fontSize: 50
+  m_fontSize: 55.2
   m_fontSizeBase: 48
   m_fontWeight: 400
   m_enableAutoSizing: 1
@@ -3919,19 +3919,6 @@ MonoBehaviour:
   - {fileID: 0}
   - {fileID: 0}
   tileSpriteData: {fileID: 11400000, guid: 417df9919aa67db42bb71926f45bb92e, type: 2}
-  occupiedTiles:
-  - {fileID: 0}
-  - {fileID: 0}
-  - {fileID: 0}
-  - {fileID: 0}
-  - {fileID: 0}
-  occupiedConveyorTiles:
-  - {fileID: 0}
-  - {fileID: 0}
-  - {fileID: 0}
-  - {fileID: 0}
-  - {fileID: 0}
-  - {fileID: 0}
 --- !u!114 &1270107235
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -5890,7 +5877,7 @@ MonoBehaviour:
   m_faceColor:
     serializedVersion: 2
     rgba: 4294967295
-  m_fontSize: 36.3
+  m_fontSize: 39.05
   m_fontSizeBase: 40
   m_fontWeight: 400
   m_enableAutoSizing: 1

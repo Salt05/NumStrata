@@ -294,7 +294,39 @@ namespace NumStrata.Gameplay
             }
 
             UpdateTileVisibility();
+            ApplyMysteryMasks(loadedTileValues.mysteryCount);
             Debug.Log($"[BoardLayerSystem] Spawn completed. Spawned={spawnedCount}", this);
+        }
+
+        private void ApplyMysteryMasks(int count)
+        {
+            if (count <= 0) return;
+
+            List<SpawnedTileEntry> candidates = new List<SpawnedTileEntry>();
+            foreach (var entry in spawnedTiles)
+            {
+                if (entry != null && entry.tile != null && !entry.tile.isMystery)
+                {
+                    candidates.Add(entry);
+                }
+            }
+
+            System.Random rnd = new System.Random();
+            for (int i = 0; i < candidates.Count; i++)
+            {
+                int r = rnd.Next(i, candidates.Count);
+                var tmp = candidates[i];
+                candidates[i] = candidates[r];
+                candidates[r] = tmp;
+            }
+
+            int applied = 0;
+            for (int i = 0; i < candidates.Count && i < count; i++)
+            {
+                candidates[i].tile.SetMysteryMask(true);
+                applied++;
+            }
+            Debug.Log($"[BoardLayerSystem] Applied {applied} mystery masks.");
         }
 
         /// <summary>
@@ -409,11 +441,6 @@ namespace NumStrata.Gameplay
                 }
             }
 
-            for (int i = 0; i < loadedTileValues.mysteryCount; i++)
-            {
-                pool.Add("?");
-            }
-
             return pool;
         }
 
@@ -480,13 +507,6 @@ namespace NumStrata.Gameplay
 
         private void ApplyTokenToTile(Tile tile, string token)
         {
-            if (token == "?")
-            {
-                Sprite mystery = tileSpriteData != null ? tileSpriteData.mysterySprite : null;
-                tile.SetupMystery(mystery);
-                return;
-            }
-
             if (int.TryParse(token, out int numberValue))
             {
                 Sprite numberSprite = tileSpriteData != null ? tileSpriteData.GetNumberSprite(numberValue) : null;

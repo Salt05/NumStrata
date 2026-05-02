@@ -25,8 +25,8 @@ namespace NumStrata.Gameplay
         public NumStrata.Data.TileSpriteData tileSpriteData;
 
         // Mảng lưu trữ trạng thái các ô công thức (ô nào chứa tile nào)
-        private Tile[] occupiedTiles = new Tile[5];
-        private Tile[] occupiedConveyorTiles = new Tile[6];
+        public Tile[] occupiedTiles = new Tile[5];
+        public Tile[] occupiedConveyorTiles = new Tile[6];
 
         // Hệ thống hàng đợi để thực hiện hoạt ảnh Visual sau khi đã phê duyệt Logic
         private struct PlacementOrder { public Tile tile; public int slotIndex; }
@@ -175,6 +175,22 @@ public bool RequestTilePlacement(Tile tile)
                     insertPos++;
                 }
             }
+        }
+
+        /// <summary>
+        /// Lấy danh sách các index đang có Tile trên thanh công thức, từ phải sang trái.
+        /// </summary>
+        public List<int> GetOccupiedFormulaIndicesRightToLeft()
+        {
+            List<int> indices = new List<int>();
+            for (int i = occupiedTiles.Length - 1; i >= 0; i--)
+            {
+                if (occupiedTiles[i] != null)
+                {
+                    indices.Add(i);
+                }
+            }
+            return indices;
         }
 
         /// <summary>
@@ -474,7 +490,7 @@ public bool RequestTilePlacement(Tile tile)
             }
         }
 
-        private Tile GetRandomBoardTileTemplate()
+        public Tile GetRandomBoardTileTemplate()
         {
             Tile[] allTiles = FindObjectsOfType<Tile>(true);
             List<Tile> candidates = new List<Tile>();
