@@ -9,15 +9,7 @@
 [Mm]emoryCaptures/
 [Rr]ecordings/
 
-# Asset meta files must be kept, even if they contain personal settings
-!/[Aa]ssets/**/*.meta
-
-# Unity3D Generated File
-[Aa]ssets/AssetStoreTools*
-
-# VS Code & Visual Studio files
-.vscode/
-.vs/
+# Ignore project files
 *.csproj
 *.sln
 *.suo
@@ -31,30 +23,13 @@
 *.mdb
 *.opendb
 *.VC.db
+*.lscache
 
-# Unity3D generated meta files
-*.pidb.meta
-*.pdb.meta
-*.mdb.meta
-
-# Unity3D generated file on crash reports
-sysinfo.txt
-
-# Mono auto generated files
-mono_crash.*
-
-# Builds
-*.apk
-*.aab
-*.unitypackage
-*.unitypackage.meta
-*.app
-
-# Crashlytics generated file
-crashlytics-build.properties
-
-# TestRunner generated files
-InitTestScene*.unity*
+# Ignore VS/VSCode/Rider
+.vscode/
+.vs/
+.idea/
+*.DotSettings.user
 
 # OS generated files
 .DS_Store
