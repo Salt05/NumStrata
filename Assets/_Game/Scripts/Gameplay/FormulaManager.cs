@@ -2,6 +2,7 @@ using UnityEngine;
 using UnityEngine.UI;
 using System.Collections.Generic;
 using NumStrata.Utils;
+using NumStrata.UI;
 
 namespace NumStrata.Gameplay
 {
@@ -13,6 +14,10 @@ namespace NumStrata.Gameplay
     public class FormulaManager : MonoBehaviour
     {
         public static FormulaManager Instance { get; private set; }
+
+        [Header("Responsive Settings")]
+        [Tooltip("A slot from the board used as a size reference for tiles in formula slots.")]
+        public RectTransform referenceBoardSlot;
 
         [Header("Formula Slots")]
         [Tooltip("The 5 slots available in the formula bar.")]
@@ -32,6 +37,8 @@ namespace NumStrata.Gameplay
         private struct PlacementOrder { public Tile tile; public int slotIndex; }
         private Queue<PlacementOrder> visualQueue = new Queue<PlacementOrder>();
         private bool isProcessingQueue = false;
+        private Vector2 lastReferenceSlotSize = Vector2.zero;
+        private Vector2 lastScreenSize = Vector2.zero;
 
         /// <summary>
         /// Khởi tạo Singleton để các script khác (như Tile.cs) có thể dễ dàng gọi đến FormulaManager.
@@ -42,10 +49,57 @@ namespace NumStrata.Gameplay
             {
                 Instance = this;
                 AutoBindConveyorSlotsIfNeeded();
+                AutoBindReferenceSlotIfNeeded();
             }
             else
             {
                 Destroy(gameObject);
+            }
+        }
+
+        private void LateUpdate()
+        {
+            if (Screen.width != (int)lastScreenSize.x || Screen.height != (int)lastScreenSize.y)
+            {
+                lastScreenSize = new Vector2(Screen.width, Screen.height);
+                AutoBindReferenceSlotIfNeeded();
+            }
+
+            if (referenceBoardSlot == null)
+            {
+                return;
+            }
+
+            Vector2 currentSize = referenceBoardSlot.rect.size;
+            if (currentSize.x <= 0f || currentSize.y <= 0f)
+            {
+                return;
+            }
+
+            if (!Mathf.Approximately(currentSize.x, lastReferenceSlotSize.x) ||
+                !Mathf.Approximately(currentSize.y, lastReferenceSlotSize.y))
+            {
+                lastReferenceSlotSize = currentSize;
+                SyncOccupiedTileSizes();
+            }
+        }
+
+        private void AutoBindReferenceSlotIfNeeded()
+        {
+            if (referenceBoardSlot != null) return;
+            
+            // Tìm một slot bất kỳ trên board để làm mẫu
+            GameObject slotObj = GameObject.Find("Slot_1-1");
+            if (slotObj == null) slotObj = GameObject.FindWithTag("BoardSlot");
+            if (slotObj == null)
+            {
+                BoardCoordinate coord = Object.FindFirstObjectByType<BoardCoordinate>();
+                if (coord != null) slotObj = coord.gameObject;
+            }
+
+            if (slotObj != null)
+            {
+                referenceBoardSlot = slotObj.GetComponent<RectTransform>();
             }
         }
 
@@ -333,8 +387,12 @@ public bool RequestTilePlacement(Tile tile)
                 target.localScale = Vector3.Lerp(currentScale, Vector3.zero, easeIn);
                 yield return null;
             }
-            
-            if (target != null) Destroy(target.gameObject);
+            if (target != null) 
+            {
+                target.gameObject.SetActive(false);
+                Destroy(target.gameObject);
+                if (TileCounter.Instance != null) TileCounter.Instance.UpdateTileCountUI();
+            }
         }
 
         /// <summary>
@@ -352,22 +410,27 @@ public bool RequestTilePlacement(Tile tile)
             RectTransform rectT = tile.GetComponent<RectTransform>();
             if (rectT == null) return;
 
-            Vector2 sizeBefore = rectT.rect.size;
-            Vector3 scaleBefore = rectT.localScale;
+            // Đảm bảo Tile luôn bằng kích thước Board Slot mẫu
+            if (referenceBoardSlot != null)
+            {
+                UISizeSync sizeSync = tile.GetComponent<UISizeSync>();
+                if (sizeSync == null) sizeSync = tile.gameObject.AddComponent<UISizeSync>();
+                sizeSync.target = referenceBoardSlot;
+                sizeSync.syncWidth = true;
+                sizeSync.syncHeight = true;
+            }
 
+            Vector3 scaleBefore = rectT.localScale;
             AspectRatioFitter aspectFitter = tile.GetComponent<AspectRatioFitter>();
             if (aspectFitter != null) aspectFitter.enabled = false;
 
-            // Đổi cha về Slot (giữ nguyên vị trí thế giới để tính toán Move)
+            // Đổi cha về Slot
             tile.transform.SetParent(slotTransform, true); 
 
             rectT.anchorMin = new Vector2(0.5f, 0.5f);
             rectT.anchorMax = new Vector2(0.5f, 0.5f);
             rectT.pivot = new Vector2(0.5f, 0.5f);
-            rectT.sizeDelta = sizeBefore;
             rectT.localScale = scaleBefore;
-            
-            // Đảm bảo Tile nằm trên cùng của Slot để không bị che khuất
             rectT.SetAsLastSibling();
 
             if (UIEffectManager.Instance != null)
@@ -376,9 +439,10 @@ public bool RequestTilePlacement(Tile tile)
             }
             else
             {
-                // Fallback nếu manager lỗi: gán cứng vị trí để không bị lỗi "click xuyên"
                 rectT.anchoredPosition = Vector2.zero;
             }
+
+            ApplyReferenceSize(tile);
         }
 
         private void TrySpawnRemainderTileToConveyor()
@@ -565,56 +629,66 @@ public bool RequestTilePlacement(Tile tile)
 
         private void SnapTileToSlotKeepingSize(Tile tile, Transform slotTransform, Tile sourceTile)
         {
-            if (tile == null || slotTransform == null)
-            {
-                return;
-            }
+            if (tile == null || slotTransform == null) return;
 
             RectTransform rectT = tile.GetComponent<RectTransform>();
-            Vector2 sizeBefore = Vector2.zero;
-            Vector3 scaleBefore = Vector3.one;
-            RectTransform sourceRect = sourceTile != null ? sourceTile.GetComponent<RectTransform>() : null;
+            if (rectT == null) return;
 
-            if (rectT != null)
+            // Đảm bảo Tile luôn bằng kích thước Board Slot mẫu
+            if (referenceBoardSlot != null)
             {
-                if (sourceRect != null)
-                {
-                    // Dùng trực tiếp size của tile mẫu trên board để tránh bị slot/layout ép về size mặc định.
-                    Vector2 sourceRenderedSize = sourceRect.rect.size;
-                    sizeBefore = (sourceRenderedSize.x > 0f && sourceRenderedSize.y > 0f) ? sourceRenderedSize : sourceRect.sizeDelta;
-                    scaleBefore = sourceRect.localScale;
-                }
-                else
-                {
-                    // Với tile click từ board, ưu tiên lấy kích thước đang render thực tế.
-                    // sizeDelta có thể = 0 nếu anchor đang ở chế độ stretch.
-                    Vector2 renderedSize = rectT.rect.size;
-                    sizeBefore = (renderedSize.x > 0f && renderedSize.y > 0f) ? renderedSize : rectT.sizeDelta;
-                    scaleBefore = rectT.localScale;
-                }
+                UISizeSync sizeSync = tile.GetComponent<UISizeSync>();
+                if (sizeSync == null) sizeSync = tile.gameObject.AddComponent<UISizeSync>();
+                sizeSync.target = referenceBoardSlot;
+                sizeSync.syncWidth = true;
+                sizeSync.syncHeight = true;
             }
 
             AspectRatioFitter aspectFitter = tile.GetComponent<AspectRatioFitter>();
-            if (aspectFitter != null)
-            {
-                aspectFitter.enabled = false;
-            }
+            if (aspectFitter != null) aspectFitter.enabled = false;
 
             tile.transform.SetParent(slotTransform, false);
 
-            if (rectT != null)
+            rectT.anchorMin = new Vector2(0.5f, 0.5f);
+            rectT.anchorMax = new Vector2(0.5f, 0.5f);
+            rectT.pivot = new Vector2(0.5f, 0.5f);
+            rectT.localScale = Vector3.one;
+            rectT.anchoredPosition = Vector2.zero;
+
+            ApplyReferenceSize(tile);
+        }
+
+        private void SyncOccupiedTileSizes()
+        {
+            for (int i = 0; i < occupiedTiles.Length; i++)
             {
-                rectT.anchorMin = new Vector2(0.5f, 0.5f);
-                rectT.anchorMax = new Vector2(0.5f, 0.5f);
-                rectT.pivot = new Vector2(0.5f, 0.5f);
-                rectT.sizeDelta = sizeBefore;
-                rectT.localScale = scaleBefore;
-                rectT.anchoredPosition = Vector2.zero;
+                if (occupiedTiles[i] != null)
+                {
+                    ApplyReferenceSize(occupiedTiles[i]);
+                }
             }
-            else
+
+            for (int i = 0; i < occupiedConveyorTiles.Length; i++)
             {
-                tile.transform.localPosition = Vector3.zero;
+                if (occupiedConveyorTiles[i] != null)
+                {
+                    ApplyReferenceSize(occupiedConveyorTiles[i]);
+                }
             }
+        }
+
+        private void ApplyReferenceSize(Tile tile)
+        {
+            if (tile == null || referenceBoardSlot == null) return;
+
+            RectTransform rectT = tile.GetComponent<RectTransform>();
+            if (rectT == null) return;
+
+            Vector2 size = referenceBoardSlot.rect.size;
+            if (size.x <= 0f || size.y <= 0f) return;
+
+            rectT.SetSizeWithCurrentAnchors(RectTransform.Axis.Horizontal, size.x);
+            rectT.SetSizeWithCurrentAnchors(RectTransform.Axis.Vertical, size.y);
         }
 
         private void AutoBindConveyorSlotsIfNeeded()

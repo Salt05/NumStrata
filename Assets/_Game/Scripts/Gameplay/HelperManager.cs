@@ -4,6 +4,7 @@ using System.Collections;
 using System.Collections.Generic;
 using NumStrata.Utils;
 using NumStrata.Data;
+using NumStrata.UI;
 
 namespace NumStrata.Gameplay
 {
@@ -12,13 +13,13 @@ namespace NumStrata.Gameplay
         public static HelperManager Instance { get; private set; }
 
         [Header("UI Structure")]
-        public GameObject helperDimmer;
         public GameObject helperSpawnPopup;
         public Transform[] operatorSlots;
         public Transform[] numberSlots;
 
         [Header("Buttons")]
-        public Button btnSpawnGroup;
+        public Canvas btnSpawnGroupCanvas;
+        public Button btnSpawnButton;
         public Button btnShuffleGroup;
         public Button btnDeleteGroup;
         public Button btnReturnGroup;
@@ -48,6 +49,8 @@ namespace NumStrata.Gameplay
         private Sprite defaultDeleteIcon;
 
         private List<Tile> popupTiles = new List<Tile>();
+        private Vector2 lastReferenceSlotSize = Vector2.zero;
+        private Vector2 lastScreenSize = Vector2.zero;
 
         private void Awake()
         {
@@ -62,9 +65,8 @@ namespace NumStrata.Gameplay
             }
 
             // Initialize UI state
-            if (helperDimmer != null) helperDimmer.SetActive(false);
             if (helperSpawnPopup != null) helperSpawnPopup.SetActive(false);
-        }
+            }
 
         private void Start()
         {
@@ -74,10 +76,10 @@ namespace NumStrata.Gameplay
             if (imgDeleteIcon != null) defaultDeleteIcon = imgDeleteIcon.sprite;
 
             // 2. Chỉ đăng ký listener một lần duy nhất ở đây
-            if (btnSpawnGroup != null)
+            if (btnSpawnButton != null)
             {
-                btnSpawnGroup.onClick.RemoveAllListeners(); // Xóa sạch để tránh bị gán chồng hoặc gán từ Inspector
-                btnSpawnGroup.onClick.AddListener(ToggleSpawn);
+                btnSpawnButton.onClick.RemoveAllListeners(); // Xóa sạch để tránh bị gán chồng hoặc gán từ Inspector
+                btnSpawnButton.onClick.AddListener(ToggleSpawn);
             }
             if (btnShuffleGroup != null)
             {
@@ -102,6 +104,33 @@ namespace NumStrata.Gameplay
             
             // 3. Khởi tạo nội dung Popup
             StartCoroutine(InitializeHelperPopupRoutine());
+        }
+
+        private void LateUpdate()
+        {
+            RectTransform referenceSlot = GetReferenceBoardSlot();
+            if (referenceSlot == null)
+            {
+                return;
+            }
+
+            if (Screen.width != (int)lastScreenSize.x || Screen.height != (int)lastScreenSize.y)
+            {
+                lastScreenSize = new Vector2(Screen.width, Screen.height);
+            }
+
+            Vector2 currentSize = referenceSlot.rect.size;
+            if (currentSize.x <= 0f || currentSize.y <= 0f)
+            {
+                return;
+            }
+
+            if (!Mathf.Approximately(currentSize.x, lastReferenceSlotSize.x) ||
+                !Mathf.Approximately(currentSize.y, lastReferenceSlotSize.y))
+            {
+                lastReferenceSlotSize = currentSize;
+                SyncPopupTileSizes(referenceSlot);
+            }
         }
 
         private IEnumerator InitializeHelperPopupRoutine()
@@ -151,6 +180,17 @@ namespace NumStrata.Gameplay
                 rectT.sizeDelta = template.GetComponent<RectTransform>().rect.size;
                 rectT.anchoredPosition = Vector2.zero;
 
+                RectTransform referenceSlot = GetReferenceBoardSlot();
+                if (referenceSlot != null)
+                {
+                    UISizeSync sizeSync = cloneObj.GetComponent<UISizeSync>();
+                    if (sizeSync == null) sizeSync = cloneObj.AddComponent<UISizeSync>();
+                    sizeSync.target = referenceSlot;
+                    sizeSync.syncWidth = true;
+                    sizeSync.syncHeight = true;
+                    ApplyReferenceSize(rectT, referenceSlot);
+                }
+
                 // Logic Helper
                 tile.type = TileType.Helper;
                 tile.isLocked = false;
@@ -163,6 +203,15 @@ namespace NumStrata.Gameplay
                 // 5. Đổi giá trị và Sprite
                 ConfigureHelperTile(tile, slot.name);
                 tile.type = TileType.Helper; // Đảm bảo giữ type Helper
+
+                // Gán Sorting Order cho Tile lọt vào Popup (Ví dụ: Order = 1000 để nằm lên trên Popup)
+                Canvas tileCanvas = cloneObj.GetComponent<Canvas>();
+                if (tileCanvas == null) tileCanvas = cloneObj.AddComponent<Canvas>();
+                tileCanvas.overrideSorting = true;
+                tileCanvas.sortingOrder = 1000;
+
+                GraphicRaycaster tileRaycaster = cloneObj.GetComponent<GraphicRaycaster>();
+                if (tileRaycaster == null) cloneObj.AddComponent<GraphicRaycaster>();
                 
                 popupTiles.Add(tile);
             }
@@ -188,6 +237,41 @@ namespace NumStrata.Gameplay
             }
         }
 
+        private RectTransform GetReferenceBoardSlot()
+        {
+            if (FormulaManager.Instance == null)
+            {
+                return null;
+            }
+
+            return FormulaManager.Instance.referenceBoardSlot;
+        }
+
+        private void SyncPopupTileSizes(RectTransform referenceSlot)
+        {
+            for (int i = 0; i < popupTiles.Count; i++)
+            {
+                Tile tile = popupTiles[i];
+                if (tile == null) continue;
+
+                RectTransform rectT = tile.GetComponent<RectTransform>();
+                if (rectT == null) continue;
+
+                ApplyReferenceSize(rectT, referenceSlot);
+            }
+        }
+
+        private void ApplyReferenceSize(RectTransform rectT, RectTransform referenceSlot)
+        {
+            if (rectT == null || referenceSlot == null) return;
+
+            Vector2 size = referenceSlot.rect.size;
+            if (size.x <= 0f || size.y <= 0f) return;
+
+            rectT.SetSizeWithCurrentAnchors(RectTransform.Axis.Horizontal, size.x);
+            rectT.SetSizeWithCurrentAnchors(RectTransform.Axis.Vertical, size.y);
+        }
+
         private void ToggleSpawn()
         {
             isSpawnActive = !isSpawnActive;
@@ -200,8 +284,12 @@ namespace NumStrata.Gameplay
                 // Đổi icon sang nút Hủy
                 if (imgSpawnIcon != null && helperIconCancel != null) imgSpawnIcon.sprite = helperIconCancel;
                 
-                // Hiện lớp nền mờ (Popup_Layer) và Popup
-                if (helperDimmer != null) helperDimmer.SetActive(true);
+                // Hiện lớp nền mờ (Shared Dimmer) và Popup
+                if (NumStrata.UI.PauseManager.Instance != null) 
+                    NumStrata.UI.PauseManager.Instance.ToggleDimmer(true, 0.25f);
+
+                if (btnSpawnGroupCanvas != null) btnSpawnGroupCanvas.overrideSorting = true;
+                
                 if (helperSpawnPopup != null) 
                 {
                     helperSpawnPopup.SetActive(true);
@@ -223,17 +311,22 @@ namespace NumStrata.Gameplay
             
             if (helperSpawnPopup != null && helperSpawnPopup.activeSelf && UIEffectManager.Instance != null)
             {
+                if (NumStrata.UI.PauseManager.Instance != null) 
+                    NumStrata.UI.PauseManager.Instance.ToggleDimmer(false, 0.2f);
+
                 UIEffectManager.Instance.ScaleDown(helperSpawnPopup.transform, 0.2f, () => 
                 {
                     if (helperSpawnPopup != null) helperSpawnPopup.SetActive(false);
-                    // Chỉ tắt lớp nền sau khi hiệu ứng thu nhỏ popup xong
-                    if (helperDimmer != null) helperDimmer.SetActive(false);
+                    if (btnSpawnGroupCanvas != null) btnSpawnGroupCanvas.overrideSorting = false;
                 });
             }
             else
             {
                 if (helperSpawnPopup != null) helperSpawnPopup.SetActive(false);
-                if (helperDimmer != null) helperDimmer.SetActive(false);
+                if (btnSpawnGroupCanvas != null) btnSpawnGroupCanvas.overrideSorting = false;
+                
+                if (NumStrata.UI.PauseManager.Instance != null) 
+                    NumStrata.UI.PauseManager.Instance.ToggleDimmer(false, 0f);
             }
         }
 
@@ -288,6 +381,10 @@ namespace NumStrata.Gameplay
                 Tile spawnedTile = clonedObj.GetComponent<Tile>();
                 RectTransform rectT = spawnedTile.GetComponent<RectTransform>();
 
+                // Giảm Sorting Order xuống 10 sau khi click (thay vì 1000 như trong Popup)
+                Canvas spawnedCanvas = clonedObj.GetComponent<Canvas>();
+                if (spawnedCanvas != null) spawnedCanvas.sortingOrder = 10;
+
                 // Chuyển từ trạng thái Helper sang Tile thật
                 if (!string.IsNullOrEmpty(clickedTile.operatorValue))
                 {
@@ -312,14 +409,22 @@ namespace NumStrata.Gameplay
                 // Đăng ký logic vào FormulaManager
                 FormulaManager.Instance.RegisterTileToConveyor(spawnedTile, index);
 
+                // Cập nhật số đếm Tile sau khi Helper Spawn thành công
+                if (NumStrata.Gameplay.TileCounter.Instance != null) 
+                    NumStrata.Gameplay.TileCounter.Instance.UpdateTileCountUI();
+
                 // 6. Gọi đồng thời
                 if (imgSpawnIcon != null && defaultSpawnIcon != null) imgSpawnIcon.sprite = defaultSpawnIcon;
+                
+                if (NumStrata.UI.PauseManager.Instance != null) 
+                    NumStrata.UI.PauseManager.Instance.ToggleDimmer(false, 0.3f);
+
                 if (helperSpawnPopup != null && UIEffectManager.Instance != null)
                 {
                     UIEffectManager.Instance.ScaleDown(helperSpawnPopup.transform, 0.3f, () => 
                     {
                         if (helperSpawnPopup != null) helperSpawnPopup.SetActive(false);
-                        if (helperDimmer != null) helperDimmer.SetActive(false);
+                        if (btnSpawnGroupCanvas != null) btnSpawnGroupCanvas.overrideSorting = false;
                     });
                 }
 
@@ -501,12 +606,19 @@ namespace NumStrata.Gameplay
             {
                 UIEffectManager.Instance.ScaleDown(tile.transform, 0.2f, () =>
                 {
-                    if (tile != null) Destroy(tile.gameObject);
+                    if (tile != null) 
+                    {
+                        tile.gameObject.SetActive(false);
+                        Destroy(tile.gameObject);
+                    }
+                    if (NumStrata.Gameplay.TileCounter.Instance != null) NumStrata.Gameplay.TileCounter.Instance.UpdateTileCountUI();
                 });
             }
             else
             {
+                if (tile != null) tile.gameObject.SetActive(false);
                 Destroy(tile.gameObject);
+                if (NumStrata.Gameplay.TileCounter.Instance != null) NumStrata.Gameplay.TileCounter.Instance.UpdateTileCountUI();
             }
 
             // Tắt chế độ xóa sau khi xóa thành công 1 tile

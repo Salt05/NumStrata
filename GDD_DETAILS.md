@@ -22,9 +22,27 @@ NumStrata combines arithmetic puzzle solving with Mahjong-like layered access. T
 4. Quản lý phần dư chia và tile trả về trên conveyor.
 5. Lặp cho đến khi clear board hoặc thất bại.
 
-## 1.2 Trạng thái triển khai hiện tại (Code Status - 2026-04-29)
+## 1.2 Trạng thái triển khai hiện tại (Code Status - 2026-05-20)
 
 ### Đã triển khai trong code
+
+- **Hệ thống UI Dimmer & Kính mờ (Frosted Glass Blur)**:
+  - Triển khai `UI_BackgroundBlur.shader` với thuật toán 25-tap blur dùng `GrabPass` thay vì chỉ làm tối màu nền.
+  - Quản lý tập trung qua `PauseManager.Instance.ToggleDimmer()`, tự động nội suy mượt độ nhòe và độ tối bằng Coroutine, tối ưu việc không ghi đè vào Asset file (sử dụng runtime material instancing).
+- **Hệ thống Phân lớp Hiển thị (Sorting Order System)**:
+  - Áp dụng công thức tính Order chuẩn cho góc nhìn isometric/2.5D: `Value = ((Row-1)/2 * TotalLayer) + Layer + 1`.
+  - Cơ chế **Thừa hưởng Order (Sorting Inheritance)**: Khi click lấy đi một Tile, nó sẽ truyền `sortingOrder` hiện tại cho các Tile nó đang đè bên dưới (nếu Tile đó không còn bị ai khác đè), đảm bảo hiệu ứng "lớp dưới nổi lên trên" mượt mà không bị lỗi Z-fighting.
+- **Hệ thống Helper cải tiến UI (Override Sorting)**:
+  - Tile mẫu trong Popup Helper được ép `sortingOrder = 1000` và gán `GraphicRaycaster` để đảm bảo luôn hiển thị trên cùng và tương tác được khi Dimmer đang bật.
+  - Khi người chơi chọn Tile từ Helper, bản sao bay về Conveyor sẽ tự động hạ `sortingOrder` xuống **10**.
+- **Quản lý Scene (Pause Menu)**:
+  - Nút Home trong Pause Manager đã được nạp logic chuyển Scene linh hoạt qua biến `homeSceneName` (mặc định "MainMenu").
+- **Vệ sinh Dự án (Project Cleanup)**:
+  - Gỡ bỏ hoàn toàn bộ công cụ **Unity AI Assistant** và các Project liên quan để giảm tải tài nguyên.
+  - Gỡ bỏ thư viện **Nova UI** và chuyển hướng sang sử dụng hệ thống UGUI/Canvas chuẩn của Unity kết hợp với Overlap Sorting thủ công.
+- **Hệ thống đếm Tile tối ưu (TileCounter)**:
+  - `TileCounter` sử dụng kiến trúc kích hoạt theo sự kiện (Event-Driven) thay vì quét vòng lặp (`Update`/`InvokeRepeating`) để tối ưu hiệu năng.
+  - Giao diện TextMeshPro tự động cập nhật số lượng khi: Level load xong, Helper sinh thêm Tile, Helper xóa Tile, hoặc kết thúc giải toán.
 
 - **Đọc dữ liệu inventory theo nhiều mảng phép tính**: `Inventory_Test.json` đã hỗ trợ schema `arrays[]`, mỗi `array` đại diện cho 1 chuỗi phép tính.
 - **Tương thích ngược dữ liệu cũ**: vẫn đọc được schema cũ dùng `array` chung.
@@ -210,21 +228,25 @@ UX:
 7. Sau khi graph hợp lệ, gắn Mystery ngẫu nhiên lên number tile theo mysteryCount của level.
 8. Nếu vượt số lần generate cho phép, fallback về safe template cùng band độ khó.
 
-## 5.2 Daily Challenge
+## 5.2 Daily Challenge (Weekly Streak System)
 
-- Reset theo UTC 00:00.
-- Người chơi có thể tự do chọn ngày trong lịch.
-- Trạng thái ngày: đã, đang, chưa.
-- UI calendar hiển thị tiến độ tháng (ví dụ 7/31).
-- Độ khó Daily thiết kế đơn giản theo số lượng phép tính (tương ứng số toán tử cần dùng).
+- Chuỗi Daily được tính theo tuần (Thứ 2 - Chủ Nhật).
+- Tài nguyên: Mỗi ngày hệ thống cung cấp 1 màn chơi mới. Người chơi có thể chơi bù các ngày trước đó trong cùng một tuần.
+- **Quy tắc Streak:**
+  - Người chơi tích lũy tối đa 7 streak mỗi tuần (tương ứng từ Thứ 2 đến Chủ Nhật).
+  - **Điều kiện giữ và mất chuỗi:**
+    - Nếu kết thúc tuần (hết ngày Chủ Nhật) mà người chơi không hoàn thành đủ 7 màn (không đạt 7 streak), toàn bộ chuỗi streak tổng sẽ bị reset về 0 (trừ khi có Shield).
+    - Streak tổng (Total Streak) là tổng số ngày chơi liên tục qua nhiều tuần.
+  - **Tiến hóa Icon Streak:** Khi Total Streak đạt tới các mốc nhất định (ví dụ: 7, 30, 100, 365 ngày), icon streak trong game sẽ thay đổi hình dáng/hiệu ứng để thể hiện đẳng cấp.
+- UI calendar hiển thị tiến độ tuần hiện tại (ví dụ: 4/7 ngày đã hoàn thành).
+- Độ khó Daily thiết kế đơn giản theo số lượng phép tính.
 - Thuật toán tự sinh số dựa trên bộ toán tử của ngày.
-- Layout được chọn ngẫu nhiên từ danh sách layout hợp lệ (`layoutPool`).
-- Mỗi người chơi có instance Daily riêng theo ngày; thoát game vẫn lưu checkpoint và vào lại chơi tiếp.
+- Layout được chọn ngẫu nhiên từ danh sách layout hợp lệ.
+- Mỗi người chơi có instance Daily riêng; cho phép resume nếu đang chơi dở.
 
-### Streak & Shield
-
+### Streak Shield
 - Mỗi người chơi có 1 shield bảo vệ chuỗi.
-- Nếu bỏ lỡ hoặc thất bại một ngày, ưu tiên mất shield trước, chưa mất chuỗi ngay.
+- Nếu kết thúc tuần không đủ 7 streak, shield sẽ tự động tiêu thụ để giữ lại Total Streak (nhưng tuần mới vẫn bắt đầu từ 0/7).
 - Shield hồi sau đúng 7 ngày tính từ timestamp mất shield.
 
 ## 5.3 Endless Mode
@@ -259,7 +281,7 @@ Hệ thống Helper đã được phát triển hoàn thiện và quản lý t�
 - **Nguyên lý:** Mở ra giao diện Popup cho phép người chơi chủ động chọn 1 Tile (Toán tử: +, -, x, / hoặc Số: 1-9).
 - **Phạm vi & Cách thức:**
   - Hỗ trợ đổi dấu (Toggle Sign) cho phép đổi từ số dương sang âm và ngược lại trực tiếp trên giao diện.
-  - Khi chọn, hệ thống tạo ra một bản sao (Instantiate) của Tile đó và gán `TileType` tương ứng.
+  - **Rendering logic:** Các Tile mẫu trong popup sử dụng `sortingOrder = 1000`. Khi click chọn, hệ thống tạo bản sao, chuyển `TileType` và hạ `sortingOrder` của bản sao xuống **10** trước khi đưa về Conveyor.
   - Tile sau khi sinh sẽ lập tức bay về ô trống đầu tiên trên Băng chuyền (`Conveyor`).
   - Logic xác định ô trống dựa vào `FormulaManager.Instance.TryGetNextConveyorSlot`.
 
@@ -411,6 +433,8 @@ Khuyến nghị: dùng Cloud Firestore làm nguồn dữ liệu gameplay chính,
   - displayName
   - createdAt
   - gold
+  - totalStreak (int): Tổng chuỗi tích lũy qua các tuần
+  - streakIconId (string): ID của icon streak hiện tại dựa trên totalStreak
   - shield:
     - hasShield (bool)
     - lastShieldConsumedAt
@@ -418,7 +442,7 @@ Khuyến nghị: dùng Cloud Firestore làm nguồn dữ liệu gameplay chính,
 
 ### F. player_campaign_progress
 
-- Mục đích: tiến trình Campaign theo người chơi.
+- Mục đích: tiến trình Campaign theo người chơi (Lưu trên Server).
 - Khóa chính gợi ý: playerId_levelId
 - Trường chính:
   - playerId
@@ -430,20 +454,16 @@ Khuyến nghị: dùng Cloud Firestore làm nguồn dữ liệu gameplay chính,
 
 ### G. player_daily_progress
 
-- Mục đích: tiến trình Daily theo ngày.
-- Khóa chính gợi ý: playerId_dateKey
+- Mục đích: tiến trình Daily & Streak theo người chơi (Lưu trên Server).
+- Khóa chính gợi ý: playerId_currentWeekId (ví dụ: player123_2026_w20)
 - Trường chính:
   - playerId
-  - dateKey
-  - seed
-  - selectedLayoutId
-  - generatedNumbers[]
-  - generatedOperators[]
-  - snapshot
-  - lastCheckpointAt
-  - state (đã, đang, chưa)
-  - usedShieldOnDate
-  - streakSnapshot
+  - weekId (YYYY_wWW)
+  - completedDays[] (array: [1, 2, 4]): Danh sách các thứ trong tuần đã hoàn thành (1=Thứ 2, 7=Chủ Nhật)
+  - currentStreakCount: 0-7 (Số màn đã xong trong tuần này)
+  - dailySnapshots: map các snapshot màn chơi đang dang dở theo từng ngày.
+  - lastUpdateAt: timestamp
+  - usedShieldThisWeek: boolean
 
 ### H. player_inventory
 
@@ -629,6 +649,35 @@ Assets/_Game/
 
 ---
 
+## 9.3 Data Security & Persistence Rules
+
+Để đảm bảo tính toàn vẹn dữ liệu và trải nghiệm người dùng mượt mà, hệ thống áp dụng các quy tắc sau:
+
+### 1. Static Content (Levels, Layouts)
+- **Định dạng:** JSON.
+- **Bảo mật:** Mã hóa **AES-256** trong quá trình Build Pipeline.
+- **Triển khai:** File thô dùng trong Editor để dễ debug, file mã hóa được đưa vào `StreamingAssets` hoặc `Addressables` khi đóng gói. Key mã hoá được che giấu (Obfuscated) trong mã nguồn.
+
+### 2. Sensitive User Data (Gold, Streak, Progress)
+- **Local Persistence (Offline):**
+  - Lưu vào `Application.persistentDataPath`.
+  - Sử dụng mã hóa **AES** kết hợp với **Checksum (Hash)** để phát hiện can thiệp file save.
+  - Mỗi khi load file, hệ thống tính toán lại Hash và so sánh; nếu sai lệch sẽ xử lý theo quy tắc bảo mật (ví dụ: dùng bản backup hoặc cảnh báo).
+- **Cloud Sync (Online):**
+  - Đồng bộ qua **Firebase/Unity Cloud Save** khi có kết nối Internet.
+  - Sử dụng cơ chế **Dirty Flag**: Chỉ đẩy dữ liệu lên Cloud khi kết thúc màn chơi hoặc khi người chơi quay về Main Menu để tối ưu băng thông.
+  - **Conflict Resolution:** Nếu dữ liệu local và cloud khác nhau, ưu tiên bản có `lastUpdateAt` mới nhất hoặc tiến trình xa nhất.
+
+### 3. Session Data (Streak Resume)
+- **Mô tả:** Snapshot chi tiết của bàn chơi đang dang dở (vị trí tile, giá trị trên ô công thức...).
+- **Lưu trữ:** Chỉ lưu tại **Local** (Snapshot JSON nén) để resume nhanh. Không bắt buộc đẩy lên Cloud trừ khi có nhu cầu chơi xuyên thiết bị (Cross-device resume).
+
+### 4. System Settings (Non-Sensitive)
+- **Mô tả:** Volume, Mute, Language, Resolution...
+- **Lưu trữ:** Lưu thô (Plain text) qua **PlayerPrefs** hoặc JSON đơn giản để đạt tốc độ truy cập tối đa mà không tốn tài nguyên giải mã.
+
+---
+
 ## 10) Scope Notes
 
 - Bản tài liệu này khóa luật cho Campaign và Daily.
@@ -649,13 +698,13 @@ Nếu có xung đột giữa tài liệu cũ và tài liệu này, tài liệu n
 
 | Collection | Khóa chính | Vai trò | Chú thích |
 | :-- | :-- | :-- | :-- |
-| master_game_configs | configId | Cấu hình global | Lưu cap conveyor, rule thua do overflow, helper cap, timezone reset daily |
+| master_game_configs | configId | Cấu hình global | Lưu cap conveyor, rule thua, mốc tiến hóa icon streak |
 | board_layouts | layoutId | Định nghĩa stack map | Lưu stacks và phase tag để chọn đúng pool layout |
-| campaign_levels | levelId | Rule config Campaign | Lưu phase, chọn layout, profile toán tử và mysteryCount theo màn |
-| daily_challenges | dateKey | Template Daily theo ngày | Lưu operatorCount, operatorPool, layoutPool, không lưu tiến trình cá nhân |
-| players | playerId | Hồ sơ người chơi | Lưu thông tin cơ bản, gold, trạng thái shield |
-| player_campaign_progress | playerId_levelId | Tiến trình Campaign | Theo dõi attempt, state, helper usage |
-| player_daily_progress | playerId_dateKey | Tiến trình Daily cá nhân | Lưu seed, layout đã chọn, dữ liệu sinh số và snapshot để resume |
+| campaign_levels | levelId | Rule config Campaign | Lưu phase, chọn layout, profile toán tử |
+| daily_challenges | dateKey | Template Daily theo ngày | Template gốc để sinh màn chơi mỗi ngày |
+| players | playerId | Hồ sơ người chơi | Lưu gold, totalStreak, và icon hiện tại |
+| player_campaign_progress | playerId_levelId | Tiến trình Campaign | Lưu trạng thái vượt màn của người chơi |
+| player_daily_progress | playerId_weekId | Tiến trình Daily tuần | Theo dõi streak 0-7 trong tuần và snapshot resume |
 | player_inventory | playerId | Vật phẩm người chơi | Lưu tickets/cosmetics/consumables |
 | economy_transactions | txId | Sổ cái kinh tế | Audit thay đổi gold và lý do giao dịch |
 | match_events | eventId | Telemetry (optional) | Lưu sự kiện để phân tích hành vi người chơi |

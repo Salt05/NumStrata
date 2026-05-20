@@ -272,7 +272,26 @@ namespace NumStrata.Gameplay
             {
                 if (tileBelow != null)
                 {
+                    // Lấy order in layer của Tile hiện tại (Tile vừa mới click, đã biến mất hoặc vào slot)
+                    int currentOrder = 0;
+                    Canvas myCanvas = GetComponent<Canvas>();
+                    if (myCanvas != null)
+                    {
+                        currentOrder = myCanvas.sortingOrder;
+                    }
+
+                    // Remove tile này khỏi danh sách che phủ của tile bên dưới (để mở khóa)
                     tileBelow.RemoveCoveringTile(this);
+
+                    // Gán order in layer của tile bên dưới bằng với tile hiện tại
+                    if (!tileBelow.isLocked)
+                    {
+                        Canvas belowCanvas = tileBelow.GetComponent<Canvas>();
+                        if (belowCanvas != null)
+                        {
+                            belowCanvas.sortingOrder += currentOrder;
+                        }
+                    }
                 }
             }
             coveredTiles.Clear();

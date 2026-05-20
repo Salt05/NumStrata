@@ -123,10 +123,12 @@ namespace NumStrata.Gameplay
 
             Debug.Log($"[LevelLoader] Loading level with {structure.layers.Count} layers. Pool size: {pool.Count}");
 
+            int globalSortingOrder = 1;
+
             // 5. Spawn layers (Khởi tạo vỏ Tile trước, chưa gán giá trị)
             foreach (var layerData in structure.layers)
             {
-                SpawnLayerStructure(layerData);
+                SpawnLayerStructure(layerData, ref globalSortingOrder);
             }
 
             // 6. Generate Overlap Tree (Xây dựng cây đè để biết Tile nào mở, Tile nào khóa)
@@ -137,6 +139,9 @@ namespace NumStrata.Gameplay
 
             // 8. Rải mặt nạ Mystery
             ApplyMysteryMasks(inventory.mysteryCount);
+
+            // Cập nhật lại UI đếm số lượng Tile sau khi Load xong
+            if (TileCounter.Instance != null) TileCounter.Instance.UpdateTileCountUI();
 
             Debug.Log("[LevelLoader] Level load completed.");
         }
@@ -775,24 +780,48 @@ namespace NumStrata.Gameplay
             }
         }
 
-        private void SpawnLayerStructure(LayerData layerData)
+        private void SpawnLayerStructure(LayerData layerData, ref int globalSortingOrder)
         {
             GameObject layerObj = Instantiate(boardGridPrefab, boardBackground);
             layerObj.name = $"Board_Grid_Layer_{layerData.layerIndex}";
+            layerObj.transform.SetAsLastSibling(); 
 
+            // Nhóm các tọa độ theo dòng (row)
+            // Giả sử tọa độ có định dạng "X-Y", ta sẽ lấy `X` làm Row
+            Dictionary<int, List<string>> rowsDict = new Dictionary<int, List<string>>();
             foreach (string coord in layerData.spawnCoordinates)
             {
-                string slotName = $"Slot_{coord}";
-                Transform slot = FindRecursive(layerObj.transform, slotName);
-
-                if (slot != null)
+                string[] parts = coord.Split('-');
+                if (parts.Length == 2 && int.TryParse(parts[0], out int row))
                 {
-                    SpawnTileEmpty(slot, layerData.layerIndex, coord);
+                    if (!rowsDict.ContainsKey(row))
+                        rowsDict[row] = new List<string>();
+                    rowsDict[row].Add(coord);
                 }
+            }
+
+            // Sắp xếp các dòng theo thứ tự tăng dần
+            List<int> sortedRows = new List<int>(rowsDict.Keys);
+            sortedRows.Sort();
+
+            foreach (int row in sortedRows)
+            {
+                foreach (string coord in rowsDict[row])
+                {
+                    string slotName = $"Slot_{coord}";
+                    Transform slot = FindRecursive(layerObj.transform, slotName);
+
+                    if (slot != null)
+                    {
+                        SpawnTileEmpty(slot, layerData.layerIndex, coord, globalSortingOrder);
+                    }
+                }
+                // Tăng globalSortingOrder sau khi spawn xong 1 dòng
+                globalSortingOrder++;
             }
         }
 
-        private void SpawnTileEmpty(Transform slot, int layerId, string coord)
+        private void SpawnTileEmpty(Transform slot, int layerId, string coord, int sortingOrder)
         {
             GameObject tileObj = Instantiate(tileBasePrefab, slot);
             
@@ -811,6 +840,15 @@ namespace NumStrata.Gameplay
                 tile.gridX = x;
                 tile.gridY = y;
             }
+
+            // Gán Sorting Order
+            Canvas canvas = tileObj.GetComponent<Canvas>();
+            if (canvas == null) canvas = tileObj.AddComponent<Canvas>();
+            canvas.overrideSorting = true;
+            canvas.sortingOrder = sortingOrder;
+
+            UnityEngine.UI.GraphicRaycaster raycaster = tileObj.GetComponent<UnityEngine.UI.GraphicRaycaster>();
+            if (raycaster == null) tileObj.AddComponent<UnityEngine.UI.GraphicRaycaster>();
 
             tileDebugIds[tile] = allSpawnedTiles.Count + 1;
             allSpawnedTiles.Add(tile);
