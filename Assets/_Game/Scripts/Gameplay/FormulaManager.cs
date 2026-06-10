@@ -392,7 +392,14 @@ public bool RequestTilePlacement(Tile tile)
                 target.gameObject.SetActive(false);
                 Destroy(target.gameObject);
                 if (TileCounter.Instance != null) TileCounter.Instance.UpdateTileCountUI();
+                StartCoroutine(DelayedCampaignSaveCheck());
             }
+        }
+
+        private System.Collections.IEnumerator DelayedCampaignSaveCheck()
+        {
+            yield return new WaitForSeconds(0.35f);
+            CampaignSaveHooks.EvaluateTemporaryOutcomeAfterBoardChange();
         }
 
         /// <summary>

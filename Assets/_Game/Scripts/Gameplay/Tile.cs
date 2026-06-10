@@ -16,7 +16,7 @@ namespace NumStrata.Gameplay
     /// Script này chịu trách nhiệm: Lưu trữ giá trị (số hoặc phép toán), thay đổi hình ảnh hiển thị dựa trên trạng thái (khóa/mở khóa), 
     /// và đặc biệt là xử lý tương tác khi người chơi Click chuột/chạm tay vào Tile.
     /// </summary>
-    public class Tile : MonoBehaviour, IPointerClickHandler
+    public class Tile : MonoBehaviour, IPointerClickHandler, IPointerDownHandler, IPointerUpHandler
     {
         [Header("Settings")]
         public TileType type;
@@ -40,10 +40,13 @@ namespace NumStrata.Gameplay
         public bool isAssigned; // đã gán giá trị/phiên bản chưa
 
         private RectTransform rectTransform;
+        private int originalSortingOrder;
+        private Canvas tileCanvas;
 
         private void Awake()
         {
             rectTransform = GetComponent<RectTransform>();
+            tileCanvas = GetComponent<Canvas>();
         }
 
         /// <summary>
@@ -137,6 +140,15 @@ namespace NumStrata.Gameplay
                     UnityEngine.UI.Image overlayImage = mysteryOverlay.GetComponent<UnityEngine.UI.Image>();
                     if (overlayImage != null)
                     {
+                        // Gán sprite mystery từ TileSpriteData (fix lỗi overlay trắng xóa khi thiếu sprite)
+                        if (LevelLoader.Instance != null && LevelLoader.Instance.tileSpriteData != null)
+                        {
+                            Sprite mysterySprite = LevelLoader.Instance.tileSpriteData.mysterySprite;
+                            if (mysterySprite != null)
+                            {
+                                overlayImage.sprite = mysterySprite;
+                            }
+                        }
                         overlayImage.color = isLocked ? new Color32(103, 103, 103, 255) : Color.white;
                     }
                 }
@@ -227,9 +239,13 @@ namespace NumStrata.Gameplay
                 return;
             }
 
-            // Nếu Tile đang bị đè lên (khóa), bỏ qua lượt click này
+            // Nếu Tile đang bị đè lên (khóa), rung lắc mạnh để thông báo cho người chơi
             if (isLocked)
             {
+                if (UIEffectManager.Instance != null && rectTransform != null)
+                {
+                    UIEffectManager.Instance.Shake(rectTransform, 0.3f, 15f);
+                }
                 Debug.Log($"[Tile] {gameObject.name} đang bị khóa và không thể click.");
                 return;
             }
@@ -262,9 +278,50 @@ namespace NumStrata.Gameplay
             }
         }
 
+        public void OnPointerDown(PointerEventData eventData)
+        {
+            // Chỉ chạy hiệu ứng khi giữ Tile và không bị khóa
+            if (isLocked) return;
+
+            if (tileCanvas != null)
+            {
+                originalSortingOrder = tileCanvas.sortingOrder;
+                tileCanvas.sortingOrder = 900;
+            }
+
+            if (UIEffectManager.Instance != null && backgroundRenderer != null)
+            {
+                RectTransform bgRect = backgroundRenderer.rectTransform;
+                // Tăng scale lên 1.1 cho nhẹ nhàng
+                UIEffectManager.Instance.ScaleTo(bgRect, Vector3.one * 1.1f, 0.15f);
+                // Bắt đầu hiệu ứng lơ lửng + xoay (giảm amplitude mặc định)
+                UIEffectManager.Instance.StartFloating(bgRect, 5f, 5f);
+            }
+        }
+
+        public void OnPointerUp(PointerEventData eventData)
+        {
+            // Trả lại sorting order ban đầu
+            if (tileCanvas != null)
+            {
+                tileCanvas.sortingOrder = originalSortingOrder;
+            }
+
+            // Trả lại trạng thái mặc định ngay khi thả tay
+            if (UIEffectManager.Instance != null && backgroundRenderer != null)
+            {
+                RectTransform bgRect = backgroundRenderer.rectTransform;
+                // Dừng hiệu ứng lơ lửng và reset vị trí/xoay
+                UIEffectManager.Instance.StopFloating(bgRect);
+                // Thu nhỏ về 1.0 mượt mà
+                UIEffectManager.Instance.ScaleTo(bgRect, Vector3.one, 0.15f);
+            }
+        }
+
         /// <summary>
         /// Giải phóng các Tile bị Tile này đè lên. 
         /// Chỉ được gọi từ FormulaManager khi Tile chính thức được chấp nhận vào Slot.
+        /// Sorting Order không cần điều chỉnh vì đã được tính cố định theo công thức (Row * RowWeight) + (Layer * LayerWeight).
         /// </summary>
         public void ResolveOverlapOnAccept()
         {
@@ -272,26 +329,8 @@ namespace NumStrata.Gameplay
             {
                 if (tileBelow != null)
                 {
-                    // Lấy order in layer của Tile hiện tại (Tile vừa mới click, đã biến mất hoặc vào slot)
-                    int currentOrder = 0;
-                    Canvas myCanvas = GetComponent<Canvas>();
-                    if (myCanvas != null)
-                    {
-                        currentOrder = myCanvas.sortingOrder;
-                    }
-
                     // Remove tile này khỏi danh sách che phủ của tile bên dưới (để mở khóa)
                     tileBelow.RemoveCoveringTile(this);
-
-                    // Gán order in layer của tile bên dưới bằng với tile hiện tại
-                    if (!tileBelow.isLocked)
-                    {
-                        Canvas belowCanvas = tileBelow.GetComponent<Canvas>();
-                        if (belowCanvas != null)
-                        {
-                            belowCanvas.sortingOrder += currentOrder;
-                        }
-                    }
                 }
             }
             coveredTiles.Clear();

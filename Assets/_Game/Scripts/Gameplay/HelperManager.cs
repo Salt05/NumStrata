@@ -43,6 +43,15 @@ namespace NumStrata.Gameplay
         private bool isSpawnActive = false;
         public bool isDeleteActive = false;
         private bool isSignNegative = false;
+        private int currentLevelHelperUses = 0;
+
+        public int GetLevelHelperUses() { return currentLevelHelperUses; }
+        public void SetLevelHelperUses(int val) { currentLevelHelperUses = val; }
+        public void ResetHelperUses()
+        {
+            currentLevelHelperUses = 0;
+            Debug.Log("[HelperManager] Resetted helper uses to 0.");
+        }
 
         private Sprite defaultSpawnIcon;
         private Sprite defaultShuffleIcon;
@@ -274,6 +283,12 @@ namespace NumStrata.Gameplay
 
         private void ToggleSpawn()
         {
+            if (currentLevelHelperUses >= 3 && !isSpawnActive)
+            {
+                Debug.LogWarning("[HelperManager] Đã đạt giới hạn sử dụng tối đa 3 Helper trong màn chơi này.");
+                return;
+            }
+
             isSpawnActive = !isSpawnActive;
             
             if (isSpawnActive)
@@ -408,10 +423,13 @@ namespace NumStrata.Gameplay
 
                 // Đăng ký logic vào FormulaManager
                 FormulaManager.Instance.RegisterTileToConveyor(spawnedTile, index);
+                currentLevelHelperUses++;
+                Debug.Log($"[HelperManager] Helper used {currentLevelHelperUses}/3 this level.");
 
                 // Cập nhật số đếm Tile sau khi Helper Spawn thành công
                 if (NumStrata.Gameplay.TileCounter.Instance != null) 
                     NumStrata.Gameplay.TileCounter.Instance.UpdateTileCountUI();
+                CampaignSaveHooks.EvaluateTemporaryOutcomeAfterBoardChange();
 
                 // 6. Gọi đồng thời
                 if (imgSpawnIcon != null && defaultSpawnIcon != null) imgSpawnIcon.sprite = defaultSpawnIcon;
@@ -612,6 +630,7 @@ namespace NumStrata.Gameplay
                         Destroy(tile.gameObject);
                     }
                     if (NumStrata.Gameplay.TileCounter.Instance != null) NumStrata.Gameplay.TileCounter.Instance.UpdateTileCountUI();
+                    CampaignSaveHooks.EvaluateTemporaryOutcomeAfterBoardChange();
                 });
             }
             else
@@ -619,6 +638,7 @@ namespace NumStrata.Gameplay
                 if (tile != null) tile.gameObject.SetActive(false);
                 Destroy(tile.gameObject);
                 if (NumStrata.Gameplay.TileCounter.Instance != null) NumStrata.Gameplay.TileCounter.Instance.UpdateTileCountUI();
+                CampaignSaveHooks.EvaluateTemporaryOutcomeAfterBoardChange();
             }
 
             // Tắt chế độ xóa sau khi xóa thành công 1 tile

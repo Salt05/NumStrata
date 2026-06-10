@@ -27,40 +27,67 @@ NumStrata combines arithmetic puzzle solving with Mahjong-like layered access. T
 ### Đã triển khai trong code
 
 - **Hệ thống UI Dimmer & Kính mờ (Frosted Glass Blur)**:
+
   - Triển khai `UI_BackgroundBlur.shader` với thuật toán 25-tap blur dùng `GrabPass` thay vì chỉ làm tối màu nền.
   - Quản lý tập trung qua `PauseManager.Instance.ToggleDimmer()`, tự động nội suy mượt độ nhòe và độ tối bằng Coroutine, tối ưu việc không ghi đè vào Asset file (sử dụng runtime material instancing).
 - **Hệ thống Phân lớp Hiển thị (Sorting Order System)**:
+
   - Áp dụng công thức tính Order chuẩn cho góc nhìn isometric/2.5D: `Value = ((Row-1)/2 * TotalLayer) + Layer + 1`.
   - Cơ chế **Thừa hưởng Order (Sorting Inheritance)**: Khi click lấy đi một Tile, nó sẽ truyền `sortingOrder` hiện tại cho các Tile nó đang đè bên dưới (nếu Tile đó không còn bị ai khác đè), đảm bảo hiệu ứng "lớp dưới nổi lên trên" mượt mà không bị lỗi Z-fighting.
 - **Hệ thống Helper cải tiến UI (Override Sorting)**:
+
   - Tile mẫu trong Popup Helper được ép `sortingOrder = 1000` và gán `GraphicRaycaster` để đảm bảo luôn hiển thị trên cùng và tương tác được khi Dimmer đang bật.
   - Khi người chơi chọn Tile từ Helper, bản sao bay về Conveyor sẽ tự động hạ `sortingOrder` xuống **10**.
 - **Quản lý Scene (Pause Menu)**:
+
   - Nút Home trong Pause Manager đã được nạp logic chuyển Scene linh hoạt qua biến `homeSceneName` (mặc định "MainMenu").
 - **Vệ sinh Dự án (Project Cleanup)**:
+
   - Gỡ bỏ hoàn toàn bộ công cụ **Unity AI Assistant** và các Project liên quan để giảm tải tài nguyên.
   - Gỡ bỏ thư viện **Nova UI** và chuyển hướng sang sử dụng hệ thống UGUI/Canvas chuẩn của Unity kết hợp với Overlap Sorting thủ công.
-- **Hệ thống đếm Tile tối ưu (TileCounter)**:
+- **Hệ thống Tile tối ưu (TileCounter)**:
+
   - `TileCounter` sử dụng kiến trúc kích hoạt theo sự kiện (Event-Driven) thay vì quét vòng lặp (`Update`/`InvokeRepeating`) để tối ưu hiệu năng.
   - Giao diện TextMeshPro tự động cập nhật số lượng khi: Level load xong, Helper sinh thêm Tile, Helper xóa Tile, hoặc kết thúc giải toán.
-
+- **Hệ thống Challenge & Weekly Streak (Mới)**:
+  - **Logic Catch-up**: Cho phép chơi bù các ngày chưa hoàn thành trong tuần (từ Thứ 2 đến ngày hiện tại). Mỗi lần thắng sẽ ưu tiên đánh dấu ngày cũ nhất còn trống.
+  - **Mốc Milestone Icon**: Tự động thay đổi Icon Streak theo các mốc: 1, 7, 14, 30, 60, 120, 240, 480 ngày.
+  - **Phân tách Tài nguyên**: Tích hợp `CampaignSession` để tự động điều hướng đường dẫn Resource (`Resources/Streak/` cho Challenge, `Resources/Campaign/` cho Campaign).
+- **Điều hướng & Persistence (Mới)**:
+  - **Tab Redirection**: Sử dụng `TargetTabName` trong `PlayerPrefs` để quay lại đúng Tab (Home hoặc Challenge) khi từ Gameplay trở về Main Menu.
+  - **Fix Restart Logic**: Đảm bảo `RestartLevel` bảo toàn được ID màn chơi và chế độ chơi (IsChallengeMode) thông qua `PlayerPrefs`.
+- **Hệ thống Bảng Xếp Hạng (Ranking System) (Mới)**:
+  - **Cơ sở dữ liệu (Firestore)**: Truy vấn dữ liệu Top 50 người chơi theo 2 chế độ: **Campaign** (Cấp độ) và **Streak** (Chuỗi thắng). Cấu trúc lại `CloudSyncManager` để phơi bày `totalStreak` ra Root Document nhằm hỗ trợ sắp xếp (Sorting).
+  - **Tối ưu Giao diện UI**: Hỗ trợ UI động cho Prefab từng dòng. Top 1, 2, 3 tự động nhận diện thay đổi Background thành Huy chương Vàng/Bạc/Đồng và giấu chữ số để khớp thiết kế vẽ tay.
+  - **Avatar & Cleanup**: Tải Avatar ảnh đại diện Google mượt mà (dùng cơ chế ngậm `pendingAvatarUrl` chờ lúc active). Tự động lọc bỏ các tài khoản Guest (`Player_XXXX`) khỏi danh sách Top vinh danh.
+  - **Auto-Fetch & Lifecycle**: Lắng nghe sự kiện `OnConnectionStatusChanged` để tự động ngầm lấy dữ liệu ngay khi mở game, khắc phục lỗi khởi tạo Coroutine khi Panel bị ẩn lúc load.
 - **Đọc dữ liệu inventory theo nhiều mảng phép tính**: `Inventory_Test.json` đã hỗ trợ schema `arrays[]`, mỗi `array` đại diện cho 1 chuỗi phép tính.
 - **Tương thích ngược dữ liệu cũ**: vẫn đọc được schema cũ dùng `array` chung.
 - **Parser phép tính hỗn hợp**:
+
   - Hỗ trợ cả dạng `a,op,b,result` (legacy) và `a,b,op,result` (dữ liệu mới).
   - Hỗ trợ nối phép sau chia dư bằng `+,b,result` và `b,+,result` (dùng carry là số dư trước đó).
 - **Chia có dư**:
+
   - Phép chia sinh thương nguyên như luật game.
   - Khi dư `r != 0`, hệ thống sinh thêm token số dư vào pool spawn.
 - **Conveyor remainder tile (runtime)**:
+
   - Khi người chơi giải đúng phép chia có dư, hệ thống sinh thêm 1 tile số dư vào conveyor.
   - Conveyor dùng danh sách slot riêng `Slot_0..Slot_5`.
   - Tile số dư được clone từ một number tile trên board (không dùng prefab mới) để đồng bộ kích thước/thành phần.
 - **Sprite số theo đúng thứ tự Inspector**:
+
   - Với mảng 19 phần tử: `Element 0..18` map đúng `-9..9`.
   - Đã áp dụng cho cả spawn tile thường và tile số dư.
 - **Fix lỗi kích thước về 0 sau click**:
+
   - Khi chuyển tile vào slot, ưu tiên giữ size theo `RectTransform.rect.size` (fallback `sizeDelta`) để tránh width/height = 0 khi anchor stretch.
+- **Hệ thống Quản lý Switch & Animator (Mới)**:
+  - **Đồng bộ Animator theo thời gian thực (Real-time Sync)**: Giải quyết vấn đề Animator không cập nhật Parameter khi bắt đầu game hoặc khi chuyển Tab UI (Setting Panel).
+  - **Cơ chế Proxy (UISwitchClickProxy)**: Sử dụng sự kiện `OnEnable` để ép Animator tự động đồng bộ lại Visual ngay khi object vừa được kích hoạt, tránh việc hiển thị trạng thái mặc định sai lệch với dữ liệu thực tế.
+  - **Tối ưu Animator Performance**: Sử dụng `StringToHash` giúp tăng tốc độ truy cập tham số và `animator.Update(0f)` để ép máy trạng thái (State Machine) tính toán kết quả ngay lập tức trong cùng một frame, loại bỏ hoàn toàn hiện tượng "lag" animation khi load dữ liệu.
+  - **Persistence**: Tự động lưu (Save) và nạp (Load) trạng thái On/Off của các thiết lập (Âm thanh, Rung, Dark Mode...) thông qua `PlayerPrefs`.
 
 ### Đang tạm thời / chưa khóa
 
@@ -117,6 +144,7 @@ Biểu thức chuẩn:
 - Slot 4 = 0, Slot 5 = 2 -> **2** (Đúng)
 
 Lưu ý:
+
 - Với kết quả 1 chữ số, dùng Slot 4 và để Slot 5 trống.
 - Nếu kết quả là số âm 1 chữ số (ví dụ -5), đặt `-5` vào Slot 4.
 
@@ -217,11 +245,15 @@ UX:
 
 1. Dùng seed deterministic theo playerId + levelIndex + generatorVersion + serverSalt.
 2. Xác định O:
-  - Level 1-100: lấy từ operatorProfile của level.
-  - Level >= 101: chọn O là bội số của 4 theo band độ khó.
+
+- Level 1-100: lấy từ operatorProfile của level.
+- Level >= 101: chọn O là bội số của 4 theo band độ khó.
+
 3. Xác định layout:
-  - Level 1-100: lấy layout cố định do level chỉ định.
-  - Level >= 101: random layout từ pool hậu 100 với điều kiện S trong [4 x O, 5 x O].
+
+- Level 1-100: lấy layout cố định do level chỉ định.
+- Level >= 101: random layout từ pool hậu 100 với điều kiện S trong [4 x O, 5 x O].
+
 4. Tính N = S - O và đảm bảo 3 x O <= N <= 4 x O.
 5. Sinh ngược (reverse generation): tạo equation graph trước, sau đó rải tile theo thứ tự đảm bảo có đường giải.
 6. Ưu tiên sinh phép chia sớm; mọi số dư phải vào danh sách must-use và được tiêu thụ hết.
@@ -234,10 +266,11 @@ UX:
 - Tài nguyên: Mỗi ngày hệ thống cung cấp 1 màn chơi mới. Người chơi có thể chơi bù các ngày trước đó trong cùng một tuần.
 - **Quy tắc Streak:**
   - Người chơi tích lũy tối đa 7 streak mỗi tuần (tương ứng từ Thứ 2 đến Chủ Nhật).
+  - **Cơ chế Catch-up (Chơi bù):** Nếu người chơi chưa hoàn thành các ngày trước đó trong tuần, khi thắng một màn Challenge, hệ thống sẽ tự động đánh dấu hoàn thành cho ngày trống sớm nhất tính từ Thứ 2 đến ngày hiện tại. Ví dụ: Hôm nay là Thứ Tư nhưng Thứ Hai chưa chơi, thắng 1 trận sẽ được tính cho Thứ Hai.
   - **Điều kiện giữ và mất chuỗi:**
     - Nếu kết thúc tuần (hết ngày Chủ Nhật) mà người chơi không hoàn thành đủ 7 màn (không đạt 7 streak), toàn bộ chuỗi streak tổng sẽ bị reset về 0 (trừ khi có Shield).
     - Streak tổng (Total Streak) là tổng số ngày chơi liên tục qua nhiều tuần.
-  - **Tiến hóa Icon Streak:** Khi Total Streak đạt tới các mốc nhất định (ví dụ: 7, 30, 100, 365 ngày), icon streak trong game sẽ thay đổi hình dáng/hiệu ứng để thể hiện đẳng cấp.
+  - **Tiến hóa Icon Streak:** Khi Total Streak đạt tới các mốc nhất định (ví dụ: 1, 7, 14, 30, 60, 120, 240, 480 ngày), icon streak trong game sẽ thay đổi hình dáng/hiệu ứng để thể hiện đẳng cấp.
 - UI calendar hiển thị tiến độ tuần hiện tại (ví dụ: 4/7 ngày đã hoàn thành).
 - Độ khó Daily thiết kế đơn giản theo số lượng phép tính.
 - Thuật toán tự sinh số dựa trên bộ toán tử của ngày.
@@ -245,6 +278,7 @@ UX:
 - Mỗi người chơi có instance Daily riêng; cho phép resume nếu đang chơi dở.
 
 ### Streak Shield
+
 - Mỗi người chơi có 1 shield bảo vệ chuỗi.
 - Nếu kết thúc tuần không đủ 7 streak, shield sẽ tự động tiêu thụ để giữ lại Total Streak (nhưng tuần mới vẫn bắt đầu từ 0/7).
 - Shield hồi sau đúng 7 ngày tính từ timestamp mất shield.
@@ -268,7 +302,7 @@ UX:
 
 | Helper  | Chức năng                                       | Gợi ý giá (G) |
 | :------ | :------------------------------------------------ | :--------------- |
-| Shuffle | Trộn lại toàn bộ tile theo layout hiện tại    | 30               |
+| Shuffle | Trộn lại toàn bộ tile theo layout hiện tại  | 30               |
 | Return  | Thu hồi tile đang đặt trên slot về conveyor | 20               |
 | Delete  | Xóa vĩnh viễn 1 tile bất kỳ                  | 50               |
 | Spawn # | Sinh 1 number tile do người chơi chọn         | 100              |
@@ -278,6 +312,7 @@ UX:
 Hệ thống Helper đã được phát triển hoàn thiện và quản lý tập trung qua `HelperManager.cs` kết hợp với `UIEffectManager` để xử lý Animation.
 
 ### 1. Helper_Spawn (Tạo Tile Mới)
+
 - **Nguyên lý:** Mở ra giao diện Popup cho phép người chơi chủ động chọn 1 Tile (Toán tử: +, -, x, / hoặc Số: 1-9).
 - **Phạm vi & Cách thức:**
   - Hỗ trợ đổi dấu (Toggle Sign) cho phép đổi từ số dương sang âm và ngược lại trực tiếp trên giao diện.
@@ -286,6 +321,7 @@ Hệ thống Helper đã được phát triển hoàn thiện và quản lý t�
   - Logic xác định ô trống dựa vào `FormulaManager.Instance.TryGetNextConveyorSlot`.
 
 ### 2. Helper_Shuffle (Xáo Trộn Bàn Chơi)
+
 - **Nguyên lý:** Lấy toàn bộ các Tile **hiện đang kích hoạt trên Board** (không tính trên Formula Bar hay Conveyor) và xáo trộn vị trí/giá trị.
 - **Phạm vi & Cách thức:**
   - Sử dụng thuật toán **Fisher-Yates** để tráo đổi thuộc tính (`numberValue`, `operatorValue`, `Sprite`) của các Tile.
@@ -293,6 +329,7 @@ Hệ thống Helper đã được phát triển hoàn thiện và quản lý t�
   - **Bảo toàn Mystery:** Trạng thái "Mặt nạ" (`isMystery`) cũng được xáo trộn kèm theo dữ liệu, đảm bảo Tile ẩn không bị lộ giá trị.
 
 ### 3. Helper_Return (Rút Lại Nước Đi)
+
 - **Nguyên lý:** Đưa các Tile vừa đẩy lên thanh công thức (`Formula Bar`) quay trở về băng chuyền (`Conveyor`).
 - **Phạm vi & Cách thức:**
   - **LIFO (Last In First Out):** Rút các Tile từ phải sang trái (index 4 -> 0) trên Formula Bar.
@@ -301,10 +338,11 @@ Hệ thống Helper đã được phát triển hoàn thiện và quản lý t�
   - **Clipping Fix (Juice):** Hiệu ứng bay bổng (`Y + 50`) thực hiện trong hệ tọa độ của lớp cha cũ (Panel_Equation). Chỉ khi bay xong (onComplete) mới gọi `SetParent` sang Conveyor để tránh Tile bị UI đè lấp.
 
 ### 4. Helper_Delete (Phá Hủy Tile)
+
 - **Nguyên lý:** Xóa vĩnh viễn 1 Tile bất kỳ đang ở trạng thái Unlocked (sáng màu) khỏi màn chơi.
 - **Phạm vi & Cách thức:**
   - **Hinting:** Khi kích hoạt, hệ thống sẽ tự động làm mờ (`SetDimmed`) các Tile đang bị khóa trên Board (alpha = 0.4) để người chơi dễ nhận biết mục tiêu hợp lệ.
-  - **Tương tác:** 
+  - **Tương tác:**
     - Nếu click Tile bị khóa -> Rung lắc báo lỗi (`Shake`).
     - Nếu click Tile hợp lệ -> Xóa.
   - **Xử lý Xóa:**
@@ -319,22 +357,23 @@ Hệ thống Helper đã được phát triển hoàn thiện và quản lý t�
 
 Hệ thống sử dụng mô hình **Layered Grids** để quản lý các lớp Tile.
 
-1.  **Cấu trúc Board Layer:**
-    *   Mỗi Layer trong game được đại diện bởi một đối tượng **Board_Grid** riêng biệt.
-    *   `Board_Grid` chứa ma trận 11x11 các Slot tọa độ (`Slot_1-1` đến `Slot_11-11`).
-    *   Khi bắt đầu màn chơi, hệ thống sẽ sinh ra số lượng `Board_Grid` tương ứng với số lớp trong Layout.
-2.  **Quy trình Spawn vào Slot:**
-    *   Tile được sinh ra và trở thành **con trực tiếp** của Slot tương ứng tại Layer đó.
-    *   Ví dụ: Một Tile ở tọa độ "1-2" tại Layer 0 sẽ nằm trong `Layer_0/Slot_1-2`.
-3.  **Giải pháp Cố định Kích thước Tile (Anchor Center System):**
-    *   Để Tile không bị thay đổi kích thước bởi các Layout Group hoặc kích thước của Slot:
-        *   Khi spawn, Tile sẽ được thiết lập **Anchor về chính giữa (Middle-Center)**: `anchorMin = anchorMax = (0.5, 0.5)`.
-        *   Kích thước `sizeDelta` của Tile sẽ được giữ nguyên theo giá trị thiết kế trong Prefab.
-        *   Điều này đảm bảo Tile luôn giữ đúng tỷ lệ và kích thước, ngay cả khi Slot cha bị co giãn.
+1. **Cấu trúc Board Layer:**
+   * Mỗi Layer trong game được đại diện bởi một đối tượng **Board_Grid** riêng biệt.
+   * `Board_Grid` chứa ma trận 11x11 các Slot tọa độ (`Slot_1-1` đến `Slot_11-11`).
+   * Khi bắt đầu màn chơi, hệ thống sẽ sinh ra số lượng `Board_Grid` tương ứng với số lớp trong Layout.
+2. **Quy trình Spawn vào Slot:**
+   * Tile được sinh ra và trở thành **con trực tiếp** của Slot tương ứng tại Layer đó.
+   * Ví dụ: Một Tile ở tọa độ "1-2" tại Layer 0 sẽ nằm trong `Layer_0/Slot_1-2`.
+3. **Giải pháp Cố định Kích thước Tile (Anchor Center System):**
+   * Để Tile không bị thay đổi kích thước bởi các Layout Group hoặc kích thước của Slot:
+     * Khi spawn, Tile sẽ được thiết lập **Anchor về chính giữa (Middle-Center)**: `anchorMin = anchorMax = (0.5, 0.5)`.
+     * Kích thước `sizeDelta` của Tile sẽ được giữ nguyên theo giá trị thiết kế trong Prefab.
+     * Điều này đảm bảo Tile luôn giữ đúng tỷ lệ và kích thước, ngay cả khi Slot cha bị co giãn.
 
 ## 7.2 Quy trình Spawn & Di chuyển (Tile Workflow)
 
 ### 7.2.1 Quy trình Spawn
+
 1. **Khởi tạo Layer:** Dựa trên dữ liệu Layout, instantiate prefab `Board_Grid` cho mỗi Layer.
 2. **Thứ tự:** Spawn từ Layer thấp đến Layer cao.
 3. **Phân bổ:** Duyệt danh sách `spawnCoordinates` của từng Layer, tìm Slot tương ứng trong Grid của Layer đó và instantiate Tile làm con của Slot.
@@ -343,18 +382,21 @@ Hệ thống sử dụng mô hình **Layered Grids** để quản lý các lớp
 6. **Thiết lập trạng thái khóa:** Tile bị đè sẽ có `isLocked = true` và màu tối (#676767).
 
 ### 7.2.3 Giải pháp Cố định Kích thước Tile (Fixed Size Anchor System)
+
 Để đảm bảo Tile không bị thay đổi kích thước bởi các Layout Group (Conveyor, Equation Slots, Board), hệ thống sử dụng cơ chế **Anchor Snapping**:
 
-1.  **Cấu trúc phân cấp:** 
-    *   Các Slot (ví dụ `Slot_1-1`, `ConveyorSlot_0`) chỉ đóng vai trò là **Anchor (Điểm neo)** vị trí.
-    *   Các Tile khi được spawn sẽ được đặt vào một Container chung (ví dụ `ActiveTiles_Container`) nằm ngoài sự quản lý của các Layout Group.
-2.  **Cơ chế di chuyển:** 
-    *   Khi một Tile được gán vào một Slot, nó sẽ di chuyển (Tween/Snap) đến **World Position** của Slot đó.
-    *   Tile KHÔNG trở thành con trực tiếp của Slot nếu Slot đó nằm trong một Layout Group đang điều chỉnh kích thước con (như Horizontal/Vertical/Grid Layout Group).
-3.  **Quản lý kích thước:** Kích thước của Tile (`RectTransform.sizeDelta`) được xác định một lần duy nhất lúc spawn và được giữ nguyên suốt vòng đời của Tile, bất kể nó đang ở Board hay Conveyor.
+1. **Cấu trúc phân cấp:**
+   * Các Slot (ví dụ `Slot_1-1`, `ConveyorSlot_0`) chỉ đóng vai trò là **Anchor (Điểm neo)** vị trí.
+   * Các Tile khi được spawn sẽ được đặt vào một Container chung (ví dụ `ActiveTiles_Container`) nằm ngoài sự quản lý của các Layout Group.
+2. **Cơ chế di chuyển:**
+   * Khi một Tile được gán vào một Slot, nó sẽ di chuyển (Tween/Snap) đến **World Position** của Slot đó.
+   * Tile KHÔNG trở thành con trực tiếp của Slot nếu Slot đó nằm trong một Layout Group đang điều chỉnh kích thước con (như Horizontal/Vertical/Grid Layout Group).
+3. **Quản lý kích thước:** Kích thước của Tile (`RectTransform.sizeDelta`) được xác định một lần duy nhất lúc spawn và được giữ nguyên suốt vòng đời của Tile, bất kể nó đang ở Board hay Conveyor.
 
 ### 7.2.2 Quy trình Tile Di chuyển (New)
+
 Quy trình di chuyển Tile giữa Board, Slots và Conveyor tuân thủ các bước:
+
 1. **Xác định đích (Target Identification):** Dựa trên tọa độ đích (Board Matrix) hoặc Index (Equation Slots/Conveyor).
 2. **Kiểm tra hợp lệ (Validation):**
    - Di chuyển từ Board: Tile phải ở trạng thái `Unlocked`.
@@ -423,7 +465,6 @@ Khuyến nghị: dùng Cloud Firestore làm nguồn dữ liệu gameplay chính,
   - operatorPool[]
   - layoutPool[]
   - status (published, draft)
-
 
 ### E. players
 
@@ -654,11 +695,13 @@ Assets/_Game/
 Để đảm bảo tính toàn vẹn dữ liệu và trải nghiệm người dùng mượt mà, hệ thống áp dụng các quy tắc sau:
 
 ### 1. Static Content (Levels, Layouts)
+
 - **Định dạng:** JSON.
 - **Bảo mật:** Mã hóa **AES-256** trong quá trình Build Pipeline.
 - **Triển khai:** File thô dùng trong Editor để dễ debug, file mã hóa được đưa vào `StreamingAssets` hoặc `Addressables` khi đóng gói. Key mã hoá được che giấu (Obfuscated) trong mã nguồn.
 
 ### 2. Sensitive User Data (Gold, Streak, Progress)
+
 - **Local Persistence (Offline):**
   - Lưu vào `Application.persistentDataPath`.
   - Sử dụng mã hóa **AES** kết hợp với **Checksum (Hash)** để phát hiện can thiệp file save.
@@ -669,10 +712,12 @@ Assets/_Game/
   - **Conflict Resolution:** Nếu dữ liệu local và cloud khác nhau, ưu tiên bản có `lastUpdateAt` mới nhất hoặc tiến trình xa nhất.
 
 ### 3. Session Data (Streak Resume)
+
 - **Mô tả:** Snapshot chi tiết của bàn chơi đang dang dở (vị trí tile, giá trị trên ô công thức...).
 - **Lưu trữ:** Chỉ lưu tại **Local** (Snapshot JSON nén) để resume nhanh. Không bắt buộc đẩy lên Cloud trừ khi có nhu cầu chơi xuyên thiết bị (Cross-device resume).
 
 ### 4. System Settings (Non-Sensitive)
+
 - **Mô tả:** Volume, Mute, Language, Resolution...
 - **Lưu trữ:** Lưu thô (Plain text) qua **PlayerPrefs** hoặc JSON đơn giản để đạt tốc độ truy cập tối đa mà không tốn tài nguyên giải mã.
 
@@ -696,39 +741,39 @@ Nếu có xung đột giữa tài liệu cũ và tài liệu này, tài liệu n
 
 ## 12.1 Danh sách collections
 
-| Collection | Khóa chính | Vai trò | Chú thích |
-| :-- | :-- | :-- | :-- |
-| master_game_configs | configId | Cấu hình global | Lưu cap conveyor, rule thua, mốc tiến hóa icon streak |
-| board_layouts | layoutId | Định nghĩa stack map | Lưu stacks và phase tag để chọn đúng pool layout |
-| campaign_levels | levelId | Rule config Campaign | Lưu phase, chọn layout, profile toán tử |
-| daily_challenges | dateKey | Template Daily theo ngày | Template gốc để sinh màn chơi mỗi ngày |
-| players | playerId | Hồ sơ người chơi | Lưu gold, totalStreak, và icon hiện tại |
-| player_campaign_progress | playerId_levelId | Tiến trình Campaign | Lưu trạng thái vượt màn của người chơi |
-| player_daily_progress | playerId_weekId | Tiến trình Daily tuần | Theo dõi streak 0-7 trong tuần và snapshot resume |
-| player_inventory | playerId | Vật phẩm người chơi | Lưu tickets/cosmetics/consumables |
-| economy_transactions | txId | Sổ cái kinh tế | Audit thay đổi gold và lý do giao dịch |
-| match_events | eventId | Telemetry (optional) | Lưu sự kiện để phân tích hành vi người chơi |
+| Collection               | Khóa chính     | Vai trò                  | Chú thích                                               |
+| :----------------------- | :--------------- | :------------------------ | :-------------------------------------------------------- |
+| master_game_configs      | configId         | Cấu hình global         | Lưu cap conveyor, rule thua, mốc tiến hóa icon streak |
+| board_layouts            | layoutId         | Định nghĩa stack map   | Lưu stacks và phase tag để chọn đúng pool layout   |
+| campaign_levels          | levelId          | Rule config Campaign      | Lưu phase, chọn layout, profile toán tử               |
+| daily_challenges         | dateKey          | Template Daily theo ngày | Template gốc để sinh màn chơi mỗi ngày             |
+| players                  | playerId         | Hồ sơ người chơi     | Lưu gold, totalStreak, và icon hiện tại               |
+| player_campaign_progress | playerId_levelId | Tiến trình Campaign     | Lưu trạng thái vượt màn của người chơi          |
+| player_daily_progress    | playerId_weekId  | Tiến trình Daily tuần  | Theo dõi streak 0-7 trong tuần và snapshot resume      |
+| player_inventory         | playerId         | Vật phẩm người chơi  | Lưu tickets/cosmetics/consumables                        |
+| economy_transactions     | txId             | Sổ cái kinh tế         | Audit thay đổi gold và lý do giao dịch               |
+| match_events             | eventId          | Telemetry (optional)      | Lưu sự kiện để phân tích hành vi người chơi    |
 
 ## 12.2 Chú thích sử dụng nhanh
 
-| Bảng | Nên đọc/ghi khi nào | Lưu ý triển khai |
-| :-- | :-- | :-- |
-| board_layouts | Lúc tải màn, tạo board ban đầu | Validate tổng số slot = sum(count), không chứa tham số Mystery |
-| campaign_levels | Lúc vào level Campaign | Phase pre100 dùng fixedLayout + operatorProfile; phase post100 random layout + equal operator; đọc mysteryCount để gắn Mystery |
-| daily_challenges | Lúc tạo challenge ngày | Publish template mỗi ngày theo UTC 00:00 |
-| player_campaign_progress | Sau mỗi ván Campaign | Upsert theo playerId_levelId |
-| player_daily_progress | Trong lúc chơi Daily và khi thoát | Autosave checkpoint để resume chính xác khi vào lại |
-| economy_transactions | Mỗi thay đổi Gold | Ghi theo cơ chế append-only để audit |
+| Bảng                    | Nên đọc/ghi khi nào               | Lưu ý triển khai                                                                                                                  |
+| :----------------------- | :------------------------------------ | :----------------------------------------------------------------------------------------------------------------------------------- |
+| board_layouts            | Lúc tải màn, tạo board ban đầu  | Validate tổng số slot = sum(count), không chứa tham số Mystery                                                                  |
+| campaign_levels          | Lúc vào level Campaign              | Phase pre100 dùng fixedLayout + operatorProfile; phase post100 random layout + equal operator; đọc mysteryCount để gắn Mystery |
+| daily_challenges         | Lúc tạo challenge ngày             | Publish template mỗi ngày theo UTC 00:00                                                                                           |
+| player_campaign_progress | Sau mỗi ván Campaign                | Upsert theo playerId_levelId                                                                                                         |
+| player_daily_progress    | Trong lúc chơi Daily và khi thoát | Autosave checkpoint để resume chính xác khi vào lại                                                                            |
+| economy_transactions     | Mỗi thay đổi Gold                  | Ghi theo cơ chế append-only để audit                                                                                             |
 
 ## 12.3 Quy tắc đặt tên khóa gợi ý
 
-| Bảng | Mẫu khóa |
-| :-- | :-- |
-| campaign_levels | campaign_0001, campaign_0002 |
-| board_layouts | layout_campaign_stack_01 |
-| daily_challenges | 2026-04-17 |
-| player_campaign_progress | player123_campaign_0001 |
-| player_daily_progress | player123_2026-04-17 |
+| Bảng                    | Mẫu khóa                   |
+| :----------------------- | :--------------------------- |
+| campaign_levels          | campaign_0001, campaign_0002 |
+| board_layouts            | layout_campaign_stack_01     |
+| daily_challenges         | 2026-04-17                   |
+| player_campaign_progress | player123_campaign_0001      |
+| player_daily_progress    | player123_2026-04-17         |
 
 ---
 
@@ -738,161 +783,163 @@ Nếu có xung đột giữa tài liệu cũ và tài liệu này, tài liệu n
 
 Để giải quyết vấn đề hiển thị và logic cho hệ thống chồng lớp (Mahjong-style):
 
-1.  **Hiển thị (Visual): "Local Stack"**
-    *   Mỗi tọa độ (Cell) chỉ khởi tạo (Instantiate) tối đa **2 lớp trên cùng**.
-    *   Lớp 0 (Top): Trạng thái `Unlocked` (Sáng).
-    *   Lớp 1 (Below): Trạng thái `Locked` (Tối).
-    *   Khi Lớp 0 bị lấy đi -> Lớp 1 chuyển thành Unlocked -> Tải dữ liệu lớp tiếp theo từ Stack để hiển thị làm Locked mới.
-    *   *Mục đích:* Tối ưu hiệu năng và giảm nhiễu thị giác cho người chơi.
+1. **Hiển thị (Visual): "Local Stack"**
 
-2.  **Logic: "Coordinate-Based Dependency"**
-    *   Việc Unlock không chỉ dựa trên va chạm vật lý mà dựa trên sự tồn tại của Tile ở Layer cao hơn tại cùng một tọa độ hoặc các tọa độ lân cận (tùy theo quy tắc phủ).
-    *   Hỗ trợ thuật toán **Deadlock Detector** bằng cách duyệt đồ thị phụ thuộc.
+   * Mỗi tọa độ (Cell) chỉ khởi tạo (Instantiate) tối đa **2 lớp trên cùng**.
+   * Lớp 0 (Top): Trạng thái `Unlocked` (Sáng).
+   * Lớp 1 (Below): Trạng thái `Locked` (Tối).
+   * Khi Lớp 0 bị lấy đi -> Lớp 1 chuyển thành Unlocked -> Tải dữ liệu lớp tiếp theo từ Stack để hiển thị làm Locked mới.
+   * *Mục đích:* Tối ưu hiệu năng và giảm nhiễu thị giác cho người chơi.
+2. **Logic: "Coordinate-Based Dependency"**
+
+   * Việc Unlock không chỉ dựa trên va chạm vật lý mà dựa trên sự tồn tại của Tile ở Layer cao hơn tại cùng một tọa độ hoặc các tọa độ lân cận (tùy theo quy tắc phủ).
+   * Hỗ trợ thuật toán **Deadlock Detector** bằng cách duyệt đồ thị phụ thuộc.
 
 ### 14.2 Công cụ thiết kế màn chơi (Level Editor Tool)
 
 Công cụ này giúp designer tạo ra các tệp JSON layout một cách trực quan thay vì nhập liệu thủ công.
 
-1.  **Giao diện Grid Editor:**
-    *   Kích thước lưới cố định: **11x11**.
-    *   Cho phép designer chọn Layer để vẽ.
-    *   **Layer Tabs:** Chuyển đổi giữa các lớp để chỉ định tọa độ spawn cho lớp đó.
-    *   Hiển thị dạng **Heatmap**: Mỗi ô hiện số lớp tổng cộng.
+1. **Giao diện Grid Editor:**
 
-2.  **Thao tác người dùng:**
-    *   **Chuột trái:** Đánh dấu/Bỏ đánh dấu tọa độ spawn cho Layer đang chọn.
-    *   **Drag (Kéo chuột):** "Vẽ" nhanh một vùng tọa độ.
-    *   **Layer Preview (X-Ray):** Nhìn xuyên qua các lớp.
+   * Kích thước lưới cố định: **11x11**.
+   * Cho phép designer chọn Layer để vẽ.
+   * **Layer Tabs:** Chuyển đổi giữa các lớp để chỉ định tọa độ spawn cho lớp đó.
+   * Hiển thị dạng **Heatmap**: Mỗi ô hiện số lớp tổng cộng.
+2. **Thao tác người dùng:**
 
-3.  **Tính năng Hệ thống:**
-    *   **3D Preview:** Nút bấm để sinh nhanh các khối Cube trong Scene Unity nhằm kiểm tra độ cao thực tế của các stack.
-    *   **JSON Export:** Xuất dữ liệu theo đúng Schema `board_layouts` (layers[] {layerIndex, spawnCoordinates[]}).
-    *   **Auto-Naming:** Tự động tạo `layoutId` theo định dạng chuẩn.
+   * **Chuột trái:** Đánh dấu/Bỏ đánh dấu tọa độ spawn cho Layer đang chọn.
+   * **Drag (Kéo chuột):** "Vẽ" nhanh một vùng tọa độ.
+   * **Layer Preview (X-Ray):** Nhìn xuyên qua các lớp.
+3. **Tính năng Hệ thống:**
+
+   * **3D Preview:** Nút bấm để sinh nhanh các khối Cube trong Scene Unity nhằm kiểm tra độ cao thực tế của các stack.
+   * **JSON Export:** Xuất dữ liệu theo đúng Schema `board_layouts` (layers[] {layerIndex, spawnCoordinates[]}).
+   * **Auto-Naming:** Tự động tạo `layoutId` theo định dạng chuẩn.
 
 ### 14.3 Quy trình triển khai (Workflow)
+
 1. Designer dùng **Level Editor Tool** để "vẽ" cấu trúc các lớp (Layout) -> Xuất JSON.
 2. Hệ thống **Campaign Generator** đọc JSON Layout -> Tính toán số lượng ô trống (S).
 3. Dựa trên luật (O+N=S), hệ thống sinh ra bộ số và toán tử (Payload).
 4. Thực hiện rải (Shuffle/Distribute) Payload vào các Stack theo thứ tự đảm bảo giải được.
 
-
 ## 13.1 master_game_configs
 
-| Field | Type | Required | Note |
-| :-- | :-- | :-- | :-- |
-| configId | string | Yes | Document id, ví dụ default, staging, live |
-| conveyorVisibleCap | number | Yes | Số ô conveyor hiển thị, hiện tại là 6 |
-| conveyorOverflowLose | boolean | Yes | Nếu phát sinh tile mới khi conveyor đã đủ 6 ô thì thua ngay |
-| helperUseCapPerLevel | number | Yes | Tổng số lần dùng helper mỗi màn |
-| dailyResetTimezone | string | Yes | Múi giờ reset Daily, hiện tại UTC |
-| shieldRegenDays | number | Yes | Số ngày hồi shield sau khi mất |
+| Field                | Type    | Required | Note                                                                 |
+| :------------------- | :------ | :------- | :------------------------------------------------------------------- |
+| configId             | string  | Yes      | Document id, ví dụ default, staging, live                          |
+| conveyorVisibleCap   | number  | Yes      | Số ô conveyor hiển thị, hiện tại là 6                         |
+| conveyorOverflowLose | boolean | Yes      | Nếu phát sinh tile mới khi conveyor đã đủ 6 ô thì thua ngay |
+| helperUseCapPerLevel | number  | Yes      | Tổng số lần dùng helper mỗi màn                                |
+| dailyResetTimezone   | string  | Yes      | Múi giờ reset Daily, hiện tại UTC                                |
+| shieldRegenDays      | number  | Yes      | Số ngày hồi shield sau khi mất                                   |
 
 ## 13.2 board_layouts
 
-| Field | Type | Required | Note |
-| :-- | :-- | :-- | :-- |
-| layoutId | string | Yes | Document id của layout |
-| layoutPhase | string | Yes | campaign_pre100, campaign_post100, hoặc shared |
-| stacks | array<object> | Yes | Danh sách stack tại các cell |
-| stacks[].cellId | string | Yes | Tọa độ dạng 1-1 ... 11-11 |
-| stacks[].count | number | Yes | Số lớp tile tại cell, >= 1 |
+| Field           | Type              | Required | Note                                            |
+| :-------------- | :---------------- | :------- | :---------------------------------------------- |
+| layoutId        | string            | Yes      | Document id của layout                         |
+| layoutPhase     | string            | Yes      | campaign_pre100, campaign_post100, hoặc shared |
+| stacks          | array`<object>` | Yes      | Danh sách stack tại các cell                 |
+| stacks[].cellId | string            | Yes      | Tọa độ dạng 1-1 ... 11-11                   |
+| stacks[].count  | number            | Yes      | Số lớp tile tại cell, >= 1                   |
 
 ## 13.3 campaign_levels
 
-| Field | Type | Required | Note |
-| :-- | :-- | :-- | :-- |
-| levelId | string | Yes | Document id màn Campaign |
-| chapterId | string | Yes | Nhóm chương của level |
-| levelIndex | number | Yes | Thứ tự level trong chapter |
-| generationMode | string | Yes | RULE_V4 |
-| campaignPhase | string | Yes | pre100 hoặc post100 |
-| layoutSelectionMode | string | Yes | FIXED_LEVEL_LAYOUT hoặc RANDOM_POST100_POOL |
-| fixedLayoutId | string | No | Bắt buộc với phase pre100 |
-| operatorProfile.+Count | number | No | Số operator +, bắt buộc với phase pre100 |
-| operatorProfile.-Count | number | No | Số operator -, bắt buộc với phase pre100 |
-| operatorProfile.xCount | number | No | Số operator x, bắt buộc với phase pre100 |
-| operatorProfile./Count | number | No | Số operator /, bắt buộc với phase pre100 |
-| mysteryCount | number | Yes | Số lượng Number tile sẽ được gắn Mystery cho màn |
-| objective | object | Yes | Mục tiêu màn, ví dụ clear_board |
-| generatorVersion | number | Yes | Version thuật toán sinh Campaign |
-| isActive | boolean | Yes | Có mở level cho người chơi hay không |
+| Field                  | Type    | Required | Note                                                      |
+| :--------------------- | :------ | :------- | :-------------------------------------------------------- |
+| levelId                | string  | Yes      | Document id màn Campaign                                 |
+| chapterId              | string  | Yes      | Nhóm chương của level                                 |
+| levelIndex             | number  | Yes      | Thứ tự level trong chapter                              |
+| generationMode         | string  | Yes      | RULE_V4                                                   |
+| campaignPhase          | string  | Yes      | pre100 hoặc post100                                      |
+| layoutSelectionMode    | string  | Yes      | FIXED_LEVEL_LAYOUT hoặc RANDOM_POST100_POOL              |
+| fixedLayoutId          | string  | No       | Bắt buộc với phase pre100                              |
+| operatorProfile.+Count | number  | No       | Số operator +, bắt buộc với phase pre100              |
+| operatorProfile.-Count | number  | No       | Số operator -, bắt buộc với phase pre100              |
+| operatorProfile.xCount | number  | No       | Số operator x, bắt buộc với phase pre100              |
+| operatorProfile./Count | number  | No       | Số operator /, bắt buộc với phase pre100              |
+| mysteryCount           | number  | Yes      | Số lượng Number tile sẽ được gắn Mystery cho màn |
+| objective              | object  | Yes      | Mục tiêu màn, ví dụ clear_board                      |
+| generatorVersion       | number  | Yes      | Version thuật toán sinh Campaign                        |
+| isActive               | boolean | Yes      | Có mở level cho người chơi hay không                |
 
 ## 13.4 daily_challenges
 
-| Field | Type | Required | Note |
-| :-- | :-- | :-- | :-- |
-| dateKey | string | Yes | Document id dạng YYYY-MM-DD theo UTC |
-| operatorCount | number | Yes | Số lượng phép tính mục tiêu trong ngày |
-| operatorPool | array<string> | Yes | Danh sách toán tử cho phép dùng để sinh số |
-| layoutPool | array<string> | Yes | Danh sách layout có thể random cho người chơi |
-| status | string | Yes | draft hoặc published |
+| Field         | Type              | Required | Note                                                |
+| :------------ | :---------------- | :------- | :-------------------------------------------------- |
+| dateKey       | string            | Yes      | Document id dạng YYYY-MM-DD theo UTC               |
+| operatorCount | number            | Yes      | Số lượng phép tính mục tiêu trong ngày      |
+| operatorPool  | array`<string>` | Yes      | Danh sách toán tử cho phép dùng để sinh số  |
+| layoutPool    | array`<string>` | Yes      | Danh sách layout có thể random cho người chơi |
+| status        | string            | Yes      | draft hoặc published                               |
 
 ## 13.5 players
 
-| Field | Type | Required | Note |
-| :-- | :-- | :-- | :-- |
-| playerId | string | Yes | Document id người chơi |
-| displayName | string | Yes | Tên hiển thị |
-| createdAt | timestamp | Yes | Thời điểm tạo tài khoản |
-| updatedAt | timestamp | Yes | Thời điểm cập nhật hồ sơ gần nhất |
-| gold | number | Yes | Số dư vàng hiện tại |
-| shield.hasShield | boolean | Yes | Đang còn shield hay không |
-| shield.lastShieldConsumedAt | timestamp | No | Thời điểm shield bị dùng gần nhất |
-| shield.nextShieldRegenAt | timestamp | No | Mốc giờ shield hồi lại |
+| Field                       | Type      | Required | Note                                       |
+| :-------------------------- | :-------- | :------- | :----------------------------------------- |
+| playerId                    | string    | Yes      | Document id người chơi                  |
+| displayName                 | string    | Yes      | Tên hiển thị                            |
+| createdAt                   | timestamp | Yes      | Thời điểm tạo tài khoản              |
+| updatedAt                   | timestamp | Yes      | Thời điểm cập nhật hồ sơ gần nhất |
+| gold                        | number    | Yes      | Số dư vàng hiện tại                   |
+| shield.hasShield            | boolean   | Yes      | Đang còn shield hay không               |
+| shield.lastShieldConsumedAt | timestamp | No       | Thời điểm shield bị dùng gần nhất   |
+| shield.nextShieldRegenAt    | timestamp | No       | Mốc giờ shield hồi lại                 |
 
 ## 13.6 player_campaign_progress
 
-| Field | Type | Required | Note |
-| :-- | :-- | :-- | :-- |
-| playerId | string | Yes | Tham chiếu players |
-| levelId | string | Yes | Tham chiếu campaign_levels |
-| state | string | Yes | not_started, in_progress, cleared, failed |
-| attempts | number | Yes | Số lần chơi level |
-| helperUses | number | Yes | Số lần dùng helper ở level |
+| Field      | Type   | Required | Note                                      |
+| :--------- | :----- | :------- | :---------------------------------------- |
+| playerId   | string | Yes      | Tham chiếu players                       |
+| levelId    | string | Yes      | Tham chiếu campaign_levels               |
+| state      | string | Yes      | not_started, in_progress, cleared, failed |
+| attempts   | number | Yes      | Số lần chơi level                      |
+| helperUses | number | Yes      | Số lần dùng helper ở level            |
 
 ## 13.7 player_daily_progress
 
-| Field | Type | Required | Note |
-| :-- | :-- | :-- | :-- |
-| playerId | string | Yes | Tham chiếu players |
-| dateKey | string | Yes | Ngày Daily dạng YYYY-MM-DD |
-| seed | string | Yes | Seed cá nhân theo playerId + dateKey |
-| selectedLayoutId | string | Yes | Layout được random cho người chơi trong ngày |
-| generatedNumbers | array<number> | Yes | Dữ liệu số đã sinh cho instance Daily của người chơi |
-| generatedOperators | array<string> | Yes | Bộ toán tử đã sinh cho instance Daily của người chơi |
-| snapshot | object | Yes | Trạng thái board/conveyor hiện tại để resume |
-| lastCheckpointAt | timestamp | Yes | Thời điểm lưu checkpoint gần nhất |
-| state | string | Yes | đã, đang, chưa |
-| usedShieldOnDate | boolean | Yes | Ngày đó có dùng shield hay không |
-| streakSnapshot | number | Yes | Số streak tại thời điểm cập nhật |
+| Field              | Type              | Required | Note                                                          |
+| :----------------- | :---------------- | :------- | :------------------------------------------------------------ |
+| playerId           | string            | Yes      | Tham chiếu players                                           |
+| dateKey            | string            | Yes      | Ngày Daily dạng YYYY-MM-DD                                  |
+| seed               | string            | Yes      | Seed cá nhân theo playerId + dateKey                        |
+| selectedLayoutId   | string            | Yes      | Layout được random cho người chơi trong ngày           |
+| generatedNumbers   | array`<number>` | Yes      | Dữ liệu số đã sinh cho instance Daily của người chơi |
+| generatedOperators | array`<string>` | Yes      | Bộ toán tử đã sinh cho instance Daily của người chơi |
+| snapshot           | object            | Yes      | Trạng thái board/conveyor hiện tại để resume            |
+| lastCheckpointAt   | timestamp         | Yes      | Thời điểm lưu checkpoint gần nhất                       |
+| state              | string            | Yes      | đã, đang, chưa                                            |
+| usedShieldOnDate   | boolean           | Yes      | Ngày đó có dùng shield hay không                        |
+| streakSnapshot     | number            | Yes      | Số streak tại thời điểm cập nhật                       |
 
 ## 13.8 player_inventory
 
-| Field | Type | Required | Note |
-| :-- | :-- | :-- | :-- |
-| playerId | string | Yes | Document id cùng playerId |
-| helperTickets | object | Yes | Số lượng vé helper theo loại |
-| cosmetics | array<string> | Yes | Danh sách cosmetic đã sở hữu |
-| consumables | object | Yes | Vật phẩm tiêu hao và số lượng |
+| Field         | Type              | Required | Note                                 |
+| :------------ | :---------------- | :------- | :----------------------------------- |
+| playerId      | string            | Yes      | Document id cùng playerId           |
+| helperTickets | object            | Yes      | Số lượng vé helper theo loại    |
+| cosmetics     | array`<string>` | Yes      | Danh sách cosmetic đã sở hữu    |
+| consumables   | object            | Yes      | Vật phẩm tiêu hao và số lượng |
 
 ## 13.9 economy_transactions
 
-| Field | Type | Required | Note |
-| :-- | :-- | :-- | :-- |
-| txId | string | Yes | Document id giao dịch |
-| playerId | string | Yes | Người chơi phát sinh giao dịch |
-| amount | number | Yes | Giá trị cộng hoặc trừ |
-| currency | string | Yes | Hiện tại dùng GOLD |
-| reason | string | Yes | reward, helper_use, iap, ad |
-| balanceAfter | number | Yes | Số dư sau giao dịch |
-| createdAt | timestamp | Yes | Thời điểm tạo giao dịch |
+| Field        | Type      | Required | Note                                |
+| :----------- | :-------- | :------- | :---------------------------------- |
+| txId         | string    | Yes      | Document id giao dịch              |
+| playerId     | string    | Yes      | Người chơi phát sinh giao dịch |
+| amount       | number    | Yes      | Giá trị cộng hoặc trừ          |
+| currency     | string    | Yes      | Hiện tại dùng GOLD               |
+| reason       | string    | Yes      | reward, helper_use, iap, ad         |
+| balanceAfter | number    | Yes      | Số dư sau giao dịch              |
+| createdAt    | timestamp | Yes      | Thời điểm tạo giao dịch        |
 
 ## 13.10 match_events (optional)
 
-| Field | Type | Required | Note |
-| :-- | :-- | :-- | :-- |
-| eventId | string | Yes | Document id sự kiện |
-| playerId | string | Yes | Người chơi phát sinh sự kiện |
-| mode | string | Yes | campaign, daily, endless |
-| eventType | string | Yes | Loại sự kiện telemetry |
-| ts | timestamp | Yes | Thời điểm xảy ra sự kiện |
+| Field     | Type      | Required | Note                               |
+| :-------- | :-------- | :------- | :--------------------------------- |
+| eventId   | string    | Yes      | Document id sự kiện              |
+| playerId  | string    | Yes      | Người chơi phát sinh sự kiện |
+| mode      | string    | Yes      | campaign, daily, endless           |
+| eventType | string    | Yes      | Loại sự kiện telemetry          |
+| ts        | timestamp | Yes      | Thời điểm xảy ra sự kiện     |

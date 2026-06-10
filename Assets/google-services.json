@@ -1,0 +1,47 @@
+{
+  "project_info": {
+    "project_number": "278330878957",
+    "project_id": "numstrata-989ce",
+    "storage_bucket": "numstrata-989ce.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:278330878957:android:97aaad2aa828782feb95e4",
+        "android_client_info": {
+          "package_name": "com.salt.numstrata"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "278330878957-6ffqvq15jcbsgkh1u7pqcock2100aa5a.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.salt.numstrata",
+            "certificate_hash": "e23ff928845e45c50bda8bf5f1e802dcff79e9d1"
+          }
+        },
+        {
+          "client_id": "278330878957-rmgalaml6eltgg4j76t2jplituu4s29p.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAImHzdt0NIKv3walZRyerNhtqM9XodJpU"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "278330878957-rmgalaml6eltgg4j76t2jplituu4s29p.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

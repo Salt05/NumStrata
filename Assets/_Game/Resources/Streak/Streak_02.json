@@ -1,0 +1,28 @@
+{
+    "levelName": "Streak_02",
+    "array": [],
+    "arrays": [
+        {
+            "array": [
+                "5",
+                "2",
+                "1",
+                "0",
+                "x"
+            ]
+        }
+    ],
+    "mysteryCount": 0,
+    "layers": [
+        {
+            "layerIndex": 0,
+            "spawnCoordinates": [
+                "1-1",
+                "3-1",
+                "5-1",
+                "7-1",
+                "9-1"
+            ]
+        }
+    ]
+}

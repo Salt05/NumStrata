@@ -6,26 +6,25 @@ using NumStrata.Data;
 namespace NumStrata.Gameplay
 {
     [System.Serializable]
-    public class TileInventoryData
+    public class LevelData
     {
+        public string levelName;
+
         // Legacy (v1): a single shared token array
         public List<string> array;
 
         // v2: split into multiple arrays; each array represents 1 or more calculations
         public List<TokenArrayData> arrays;
         public int mysteryCount;
+
+        // Structure
+        public List<LayerData> layers;
     }
 
     [System.Serializable]
     public class TokenArrayData
     {
         public List<string> array;
-    }
-
-    [System.Serializable]
-    public class LevelStructureData
-    {
-        public List<LayerData> layers;
     }
 
     [System.Serializable]
@@ -37,6 +36,26 @@ namespace NumStrata.Gameplay
 
     public class LevelLoader : MonoBehaviour
     {
+        public static LevelLoader Instance { get; private set; }
+        public static bool IsLevelActive { get; set; }
+
+        [Header("Campaign Info")]
+        [Tooltip("The unique ID of the current level. If empty, uses file name.")]
+        public string levelId;
+
+        private void Awake()
+        {
+            if (Instance == null)
+            {
+                Instance = this;
+            }
+            else
+            {
+                Destroy(gameObject);
+                return;
+            }
+        }
+
         [Header("Prefabs")]
         [Tooltip("The prefab for Board_Grid")]
         public GameObject boardGridPrefab;
@@ -48,8 +67,10 @@ namespace NumStrata.Gameplay
         public Transform boardBackground;
 
         [Header("Data Source")]
-        public TextAsset inventoryJsonFile;
-        public TextAsset structureJsonFile;
+        [Tooltip("Tùy chọn: gán sẵn trong scene để test. Nếu trống, load từ Resources/Campaign/{levelId}.")]
+        public TextAsset levelDataJsonFile;
+        [Tooltip("Level mặc định khi không có PendingLevelId (tên file không .json).")]
+        public string fallbackLevelId = "campaign_0001";
         public TileSpriteData tileSpriteData;
 
         private List<string> pool;
@@ -64,28 +85,99 @@ namespace NumStrata.Gameplay
         [Tooltip("Print detailed spawn and win-plan logs in the Unity Console.")]
         public bool enableSpawnPlanDebugLog = true;
 
+        // Hệ số trọng số cho công thức Sorting Order: op = (Row * RowWeight) + (Layer * LayerWeight)
+        private const int RowWeight = 1000;
+        private const int LayerWeight = 100;
+
         private void Start()
         {
-            if (inventoryJsonFile != null && structureJsonFile != null)
+            TextAsset levelFile = ResolveLevelFile();
+            if (levelFile != null)
             {
-                LoadLevel(inventoryJsonFile.text, structureJsonFile.text);
+                levelDataJsonFile = levelFile;
+                LoadLevel(levelFile.text);
             }
+        }
+
+        private TextAsset ResolveLevelFile()
+        {
+            string pendingId = PlayerPrefs.GetString(CampaignSession.PendingLevelIdKey, string.Empty);
+            if (!string.IsNullOrEmpty(pendingId))
+            {
+                PlayerPrefs.DeleteKey(CampaignSession.PendingLevelIdKey);
+                PlayerPrefs.Save();
+
+                TextAsset campaignFile = FindCampaignLevelFile(pendingId);
+                if (campaignFile != null)
+                {
+                    levelId = pendingId;
+                    return campaignFile;
+                }
+
+                Debug.LogWarning($"[LevelLoader] Không tìm thấy JSON cho '{pendingId}', dùng level mặc định trong scene.");
+            }
+
+            if (levelDataJsonFile != null)
+            {
+                if (string.IsNullOrEmpty(levelId))
+                {
+                    levelId = levelDataJsonFile.name;
+                }
+                return levelDataJsonFile;
+            }
+
+            TextAsset fallback = LoadFallbackCampaignLevel();
+            if (fallback != null)
+            {
+                levelId = fallbackLevelId;
+            }
+
+            return fallback;
+        }
+
+        private TextAsset FindCampaignLevelFile(string targetLevelId)
+        {
+            if (string.IsNullOrEmpty(targetLevelId))
+            {
+                return null;
+            }
+
+            string resourcePath = CampaignSession.GetCampaignResourcePath(targetLevelId);
+            TextAsset file = Resources.Load<TextAsset>(resourcePath);
+            if (file == null)
+            {
+                bool isChallenge = PlayerPrefs.GetInt("IsChallengeMode", 0) == 1;
+                string expectedFolder = isChallenge ? "Streak" : "Campaign";
+                Debug.LogWarning($"[LevelLoader] Resources.Load không tìm thấy '{resourcePath}'. Đặt file tại Assets/_Game/Resources/{expectedFolder}/{targetLevelId}.json");
+            }
+
+            return file;
+        }
+
+        private TextAsset LoadFallbackCampaignLevel()
+        {
+            if (string.IsNullOrEmpty(fallbackLevelId))
+            {
+                return null;
+            }
+
+            return FindCampaignLevelFile(fallbackLevelId);
         }
 
         [ContextMenu("Test Load Level")]
         public void TestLoad()
         {
-            if (inventoryJsonFile != null && structureJsonFile != null)
+            if (levelDataJsonFile != null)
             {
-                LoadLevel(inventoryJsonFile.text, structureJsonFile.text);
+                LoadLevel(levelDataJsonFile.text);
             }
             else
             {
-                Debug.LogError("[LevelLoader] JSON files are not assigned.");
+                Debug.LogError("[LevelLoader] JSON file is not assigned.");
             }
         }
 
-        public void LoadLevel(string inventoryJson, string structureJson)
+        public void LoadLevel(string levelJson)
         {
             // 1. Find Img_BoardBackground if not assigned
             if (boardBackground == null)
@@ -106,44 +198,291 @@ namespace NumStrata.Gameplay
                 SafeDestroy(child.gameObject);
             }
 
-            // 3. Parse JSONs
-            TileInventoryData inventory = JsonUtility.FromJson<TileInventoryData>(inventoryJson);
-            LevelStructureData structure = JsonUtility.FromJson<LevelStructureData>(structureJson);
+            // 3. Parse JSON
+            LevelData levelData = JsonUtility.FromJson<LevelData>(levelJson);
 
-            if (inventory == null || structure == null)
+            if (levelData == null)
             {
-                Debug.LogError("[LevelLoader] Failed to parse level JSON files.");
+                Debug.LogError("[LevelLoader] Failed to parse level JSON file.");
                 return;
             }
 
-            // 4. Build pool + equation plan from inventory data
-            pool = BuildPoolAndEquations(inventory, out parsedEquations);
+            if (!string.IsNullOrEmpty(levelData.levelName))
+            {
+                levelId = levelData.levelName;
+            }
+
+            // 4. Build pool + equation plan from level data
+            pool = BuildPoolAndEquations(levelData, out parsedEquations);
             allSpawnedTiles.Clear();
             tileDebugIds.Clear();
 
-            Debug.Log($"[LevelLoader] Loading level with {structure.layers.Count} layers. Pool size: {pool.Count}");
+            Debug.Log($"[LevelLoader] Loading level with {levelData.layers.Count} layers. Pool size: {pool.Count}");
 
-            int globalSortingOrder = 1;
 
             // 5. Spawn layers (Khởi tạo vỏ Tile trước, chưa gán giá trị)
-            foreach (var layerData in structure.layers)
+            foreach (var layerData in levelData.layers)
             {
-                SpawnLayerStructure(layerData, ref globalSortingOrder);
+                SpawnLayerStructure(layerData);
             }
 
             // 6. Generate Overlap Tree (Xây dựng cây đè để biết Tile nào mở, Tile nào khóa)
             GenerateOverlapTree();
 
-            // 7. Smart Populate Values (Rải giá trị từ Pool vào Cây để tránh Deadlock)
-            SmartPopulateValues();
+            // KIỂM TRA SESSION RESUME
+            SessionResume resume = null;
+            if (LocalDataManager.Instance != null && LocalDataManager.Instance.CurrentPlayer != null && LocalDataManager.Instance.CurrentPlayer.campaign.hasActiveRun)
+            {
+                resume = LocalDataManager.Instance.LoadSessionResume();
+            }
 
-            // 8. Rải mặt nạ Mystery
-            ApplyMysteryMasks(inventory.mysteryCount);
+            if (resume != null && resume.activeLevelId == GetCurrentLevelId())
+            {
+                RestoreSession(resume);
+            }
+            else
+            {
+                // 7. Smart Populate Values (Rải giá trị từ Pool vào Cây để tránh Deadlock)
+                SmartPopulateValues();
+
+                // 8. Rải mặt nạ Mystery
+                ApplyMysteryMasks(levelData.mysteryCount);
+            }
 
             // Cập nhật lại UI đếm số lượng Tile sau khi Load xong
             if (TileCounter.Instance != null) TileCounter.Instance.UpdateTileCountUI();
 
             Debug.Log("[LevelLoader] Level load completed.");
+
+            // Gameplay State hooks
+            IsLevelActive = true;
+            if (HelperManager.Instance != null)
+            {
+                if (resume != null)
+                {
+                    HelperManager.Instance.SetLevelHelperUses(resume.levelHelperUses);
+                }
+                else
+                {
+                    HelperManager.Instance.ResetHelperUses();
+                }
+            }
+            if (LocalDataManager.Instance != null)
+            {
+                LocalDataManager.Instance.BeginCampaignRun(GetCurrentLevelId());
+            }
+        }
+
+        public string GetCurrentLevelId()
+        {
+            if (!string.IsNullOrEmpty(levelId))
+            {
+                return levelId;
+            }
+            if (levelDataJsonFile != null)
+            {
+                return levelDataJsonFile.name;
+            }
+            return "Level_Test";
+        }
+
+        private void OnApplicationPause(bool pause)
+        {
+            if (pause)
+            {
+                SaveSessionResumeNow();
+            }
+        }
+
+        private void OnApplicationQuit()
+        {
+            SaveSessionResumeNow();
+        }
+
+        public void SaveSessionResumeNow()
+        {
+            if (!IsLevelActive || LocalDataManager.Instance == null) return;
+
+            SessionResume resume = new SessionResume();
+            resume.activeLevelId = GetCurrentLevelId();
+            if (HelperManager.Instance != null)
+            {
+                resume.levelHelperUses = HelperManager.Instance.GetLevelHelperUses();
+            }
+
+            // Save state of all tiles currently active in gameplay
+            Tile[] allTiles = FindObjectsOfType<Tile>(true);
+            foreach (Tile tile in allTiles)
+            {
+                if (tile == null || !tile.gameObject.activeInHierarchy || !tile.isAssigned) continue;
+                if (tile.type == TileType.Helper) continue; // skip helpers in popup grid
+
+                TileSaveState tileState = new TileSaveState();
+                tileState.gridX = tile.gridX;
+                tileState.gridY = tile.gridY;
+                tileState.layerId = tile.layerId;
+                tileState.tileType = tile.type.ToString();
+                tileState.numberValue = tile.numberValue;
+                tileState.operatorValue = tile.operatorValue;
+                tileState.isMystery = tile.isMystery;
+
+                // Determine location
+                if (FormulaManager.Instance != null)
+                {
+                    int formulaIdx = System.Array.IndexOf(FormulaManager.Instance.occupiedTiles, tile);
+                    int conveyorIdx = System.Array.IndexOf(FormulaManager.Instance.occupiedConveyorTiles, tile);
+
+                    if (formulaIdx >= 0)
+                    {
+                        tileState.location = "formula";
+                        tileState.slotIndex = formulaIdx;
+                    }
+                    else if (conveyorIdx >= 0)
+                    {
+                        tileState.location = "conveyor";
+                        tileState.slotIndex = conveyorIdx;
+                    }
+                    else
+                    {
+                        tileState.location = "board";
+                    }
+                }
+                else
+                {
+                    tileState.location = "board";
+                }
+
+                resume.tiles.Add(tileState);
+            }
+
+            LocalDataManager.Instance.SaveSessionResume(resume);
+        }
+
+        private void RestoreSession(SessionResume resume)
+        {
+            Debug.Log($"[LevelLoader] Restoring session with {resume.tiles.Count} tiles.");
+
+            // 1. Dựng map các tile theo toạ độ để lookup
+            var tileMap = new Dictionary<string, Tile>();
+            foreach (Tile t in allSpawnedTiles)
+            {
+                string key = $"{t.layerId}_{t.gridX}_{t.gridY}";
+                tileMap[key] = t;
+            }
+
+            List<Tile> matchedTiles = new List<Tile>();
+
+            foreach (TileSaveState tSave in resume.tiles)
+            {
+                string key = $"{tSave.layerId}_{tSave.gridX}_{tSave.gridY}";
+                if (tileMap.TryGetValue(key, out Tile existingTile))
+                {
+                    // Update value
+                    TileType type;
+                    if (!System.Enum.TryParse(tSave.tileType, out type))
+                    {
+                        type = TileType.Number;
+                    }
+
+                    if (type == TileType.Number)
+                    {
+                        existingTile.SetupNumber(tSave.numberValue, tileSpriteData.GetNumberSprite(tSave.numberValue));
+                    }
+                    else if (type == TileType.Operator)
+                    {
+                        existingTile.SetupOperator(tSave.operatorValue, tileSpriteData.GetOperatorSprite(tSave.operatorValue));
+                    }
+
+                    if (tSave.isMystery)
+                        existingTile.SetMysteryMask(true);
+
+                    // Re-locate
+                    if (tSave.location == "formula" && FormulaManager.Instance != null)
+                    {
+                        if (tSave.slotIndex >= 0 && tSave.slotIndex < FormulaManager.Instance.occupiedTiles.Length)
+                        {
+                            FormulaManager.Instance.occupiedTiles[tSave.slotIndex] = existingTile;
+                            MoveTileToSlotImmediate(existingTile, FormulaManager.Instance.formulaSlots[tSave.slotIndex]);
+                        }
+                    }
+                    else if (tSave.location == "conveyor" && FormulaManager.Instance != null)
+                    {
+                        if (tSave.slotIndex >= 0 && tSave.slotIndex < FormulaManager.Instance.occupiedConveyorTiles.Length)
+                        {
+                            FormulaManager.Instance.occupiedConveyorTiles[tSave.slotIndex] = existingTile;
+                            MoveTileToSlotImmediate(existingTile, FormulaManager.Instance.conveyorSlots[tSave.slotIndex]);
+                        }
+                    }
+
+                    matchedTiles.Add(existingTile);
+                }
+            }
+
+            // Xoá những tile không có trong file save
+            for (int i = allSpawnedTiles.Count - 1; i >= 0; i--)
+            {
+                Tile t = allSpawnedTiles[i];
+                if (!matchedTiles.Contains(t))
+                {
+                    RemoveTileFromOverlapTree(t);
+                    if (t != null && t.gameObject != null)
+                    {
+                        Destroy(t.gameObject);
+                    }
+                    allSpawnedTiles.RemoveAt(i);
+                }
+            }
+        }
+
+        private void RemoveTileFromOverlapTree(Tile tile)
+        {
+            if (tile == null) return;
+            foreach (Tile coveringTile in tile.coveringTiles)
+            {
+                if (coveringTile != null) coveringTile.coveredTiles.Remove(tile);
+            }
+            foreach (Tile coveredTile in tile.coveredTiles)
+            {
+                if (coveredTile != null)
+                {
+                    coveredTile.coveringTiles.Remove(tile);
+                    coveredTile.SetVisualState(coveredTile.coveringTiles.Count == 0);
+                }
+            }
+            tile.coveringTiles.Clear();
+            tile.coveredTiles.Clear();
+        }
+
+        private void MoveTileToSlotImmediate(Tile tile, Transform slotTransform)
+        {
+            RectTransform rectT = tile.GetComponent<RectTransform>();
+            if (rectT == null) return;
+
+            tile.transform.SetParent(slotTransform, true); 
+
+            UnityEngine.UI.AspectRatioFitter aspectFitter = tile.GetComponent<UnityEngine.UI.AspectRatioFitter>();
+            if (aspectFitter != null) aspectFitter.enabled = false;
+
+            rectT.anchorMin = new Vector2(0.5f, 0.5f);
+            rectT.anchorMax = new Vector2(0.5f, 0.5f);
+            rectT.pivot = new Vector2(0.5f, 0.5f);
+            rectT.anchoredPosition = Vector2.zero;
+            rectT.SetAsLastSibling();
+
+            RemoveTileFromOverlapTree(tile);
+
+            UnityEngine.UI.Button btn = tile.GetComponent<UnityEngine.UI.Button>();
+            if (btn != null) btn.interactable = false;
+
+            // Đồng bộ kích thước luôn nếu có FormulaManager
+            if (FormulaManager.Instance != null && FormulaManager.Instance.referenceBoardSlot != null)
+            {
+                NumStrata.UI.UISizeSync sizeSync = tile.GetComponent<NumStrata.UI.UISizeSync>();
+                if (sizeSync == null) sizeSync = tile.gameObject.AddComponent<NumStrata.UI.UISizeSync>();
+                sizeSync.target = FormulaManager.Instance.referenceBoardSlot;
+                sizeSync.syncWidth = true;
+                sizeSync.syncHeight = true;
+            }
         }
 
         private void ApplyMysteryMasks(int count)
@@ -524,28 +863,28 @@ namespace NumStrata.Gameplay
             return eqs;
         }
 
-        private List<string> BuildPoolAndEquations(TileInventoryData inventory, out List<Equation> equations)
+        private List<string> BuildPoolAndEquations(LevelData levelData, out List<Equation> equations)
         {
             equations = new List<Equation>();
             List<string> builtPool = new List<string>();
-            if (inventory == null)
+            if (levelData == null)
             {
                 return builtPool;
             }
 
             // Collect arrays (v2 preferred, v1 fallback)
             List<List<string>> groups = new List<List<string>>();
-            if (inventory.arrays != null && inventory.arrays.Count > 0)
+            if (levelData.arrays != null && levelData.arrays.Count > 0)
             {
-                foreach (var g in inventory.arrays)
+                foreach (var g in levelData.arrays)
                 {
                     if (g?.array == null || g.array.Count == 0) continue;
                     groups.Add(new List<string>(g.array));
                 }
             }
-            else if (inventory.array != null && inventory.array.Count > 0)
+            else if (levelData.array != null && levelData.array.Count > 0)
             {
-                groups.Add(new List<string>(inventory.array));
+                groups.Add(new List<string>(levelData.array));
             }
 
             // Parse each group as a chain of calculations, producing placement tokens (including remainder tokens).
@@ -780,7 +1119,7 @@ namespace NumStrata.Gameplay
             }
         }
 
-        private void SpawnLayerStructure(LayerData layerData, ref int globalSortingOrder)
+        private void SpawnLayerStructure(LayerData layerData)
         {
             GameObject layerObj = Instantiate(boardGridPrefab, boardBackground);
             layerObj.name = $"Board_Grid_Layer_{layerData.layerIndex}";
@@ -813,15 +1152,13 @@ namespace NumStrata.Gameplay
 
                     if (slot != null)
                     {
-                        SpawnTileEmpty(slot, layerData.layerIndex, coord, globalSortingOrder);
+                        SpawnTileEmpty(slot, layerData.layerIndex, coord);
                     }
                 }
-                // Tăng globalSortingOrder sau khi spawn xong 1 dòng
-                globalSortingOrder++;
             }
         }
 
-        private void SpawnTileEmpty(Transform slot, int layerId, string coord, int sortingOrder)
+        private void SpawnTileEmpty(Transform slot, int layerId, string coord)
         {
             GameObject tileObj = Instantiate(tileBasePrefab, slot);
             
@@ -841,11 +1178,11 @@ namespace NumStrata.Gameplay
                 tile.gridY = y;
             }
 
-            // Gán Sorting Order
+            // Gán Sorting Order theo công thức: op = (Row * RowWeight) + (Layer * LayerWeight)
             Canvas canvas = tileObj.GetComponent<Canvas>();
             if (canvas == null) canvas = tileObj.AddComponent<Canvas>();
             canvas.overrideSorting = true;
-            canvas.sortingOrder = sortingOrder;
+            canvas.sortingOrder = (tile.gridX * RowWeight) + (layerId * LayerWeight);
 
             UnityEngine.UI.GraphicRaycaster raycaster = tileObj.GetComponent<UnityEngine.UI.GraphicRaycaster>();
             if (raycaster == null) tileObj.AddComponent<UnityEngine.UI.GraphicRaycaster>();

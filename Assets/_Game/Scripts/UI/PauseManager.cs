@@ -2,6 +2,8 @@ using UnityEngine;
 using UnityEngine.UI;
 using UnityEngine.SceneManagement;
 using System.Collections;
+using NumStrata.Data;
+using NumStrata.Gameplay;
 
 namespace NumStrata.UI
 {
@@ -151,15 +153,41 @@ namespace NumStrata.UI
         public void RestartLevel()
         {
             Time.timeScale = 1f;
+
+            // Đảm bảo LevelLoader biết level nào và chế độ nào cần load lại khi reload scene
+            if (LevelLoader.Instance != null && !string.IsNullOrEmpty(LevelLoader.Instance.levelId))
+            {
+                // Truyền lại ID màn hiện tại để LevelLoader không bị mất dấu
+                PlayerPrefs.SetString(CampaignSession.PendingLevelIdKey, LevelLoader.Instance.levelId);
+                // Lưu trạng thái Mode hiện tại (Challenge hoặc Campaign)
+                // IsChallengeMode đã được set từ trước, ta chỉ cần đảm bảo nó được Save
+                PlayerPrefs.Save();
+            }
+
             SceneManager.LoadScene(SceneManager.GetActiveScene().name);
-            Debug.Log("[PauseManager] Restarting level...");
+            Debug.Log($"[PauseManager] Restarting level: {LevelLoader.Instance?.levelId}");
         }
 
         public void GoToHome()
         {
             Time.timeScale = 1f;
+
+            if (LevelLoader.IsLevelActive)
+            {
+                LevelLoader.Instance?.SaveSessionResumeNow();
+                LocalDataManager.Instance?.FlushPlayerDataIfDirty();
+            }
+
+            // CHỐT Tab khi quay lại Main Menu dùng Tên (Home hoặc Challenge)
+            bool isChallenge = PlayerPrefs.GetInt("IsChallengeMode", 0) == 1;
+            PlayerPrefs.SetString("TargetTabName", isChallenge ? "Challenge" : "Home");
+            
+            // RESET flag để không ảnh hưởng lần chơi sau
+            PlayerPrefs.SetInt("IsChallengeMode", 0);
+            PlayerPrefs.Save();
+
             SceneManager.LoadScene(homeSceneName);
-            Debug.Log($"[PauseManager] Loading home scene: {homeSceneName}");
+            Debug.Log($"[PauseManager] Loading home scene: {homeSceneName}. Mode: {(isChallenge ? "Challenge" : "Campaign")}");
         }
 
         public void ToggleMusic()

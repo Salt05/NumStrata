@@ -1,0 +1,11 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources xmlns:tools="http://schemas.android.com/tools" tools:keep="@string/gcm_defaultSenderId,@string/google_storage_bucket,@string/project_id,@string/google_api_key,@string/google_crash_reporting_api_key,@string/google_app_id,@string/default_android_client_id,@string/default_web_client_id">
+  <string name="gcm_defaultSenderId" translatable="false">278330878957</string>
+  <string name="google_storage_bucket" translatable="false">numstrata-989ce.firebasestorage.app</string>
+  <string name="project_id" translatable="false">numstrata-989ce</string>
+  <string name="google_api_key" translatable="false">AIzaSyAImHzdt0NIKv3walZRyerNhtqM9XodJpU</string>
+  <string name="google_crash_reporting_api_key" translatable="false">AIzaSyAImHzdt0NIKv3walZRyerNhtqM9XodJpU</string>
+  <string name="google_app_id" translatable="false">1:278330878957:android:97aaad2aa828782feb95e4</string>
+  <string name="default_android_client_id" translatable="false">278330878957-6ffqvq15jcbsgkh1u7pqcock2100aa5a.apps.googleusercontent.com</string>
+  <string name="default_web_client_id" translatable="false">278330878957-rmgalaml6eltgg4j76t2jplituu4s29p.apps.googleusercontent.com</string>
+</resources>
