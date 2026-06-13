@@ -164,7 +164,7 @@ namespace NumStrata.UI
                 PlayerPrefs.Save();
             }
 
-            SceneManager.LoadScene(SceneManager.GetActiveScene().name);
+            LoadingScreenManager.Instance.LoadScene(SceneManager.GetActiveScene().name);
             Debug.Log($"[PauseManager] Restarting level: {LevelLoader.Instance?.levelId}");
         }
 
@@ -186,7 +186,7 @@ namespace NumStrata.UI
             PlayerPrefs.SetInt("IsChallengeMode", 0);
             PlayerPrefs.Save();
 
-            SceneManager.LoadScene(homeSceneName);
+            LoadingScreenManager.Instance.LoadScene(homeSceneName);
             Debug.Log($"[PauseManager] Loading home scene: {homeSceneName}. Mode: {(isChallenge ? "Challenge" : "Campaign")}");
         }
 

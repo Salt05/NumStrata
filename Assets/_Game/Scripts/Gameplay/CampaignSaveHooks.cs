@@ -1,4 +1,5 @@
 using NumStrata.Data;
+using NumStrata.UI;
 using UnityEngine;
 
 namespace NumStrata.Gameplay
@@ -25,6 +26,12 @@ namespace NumStrata.Gameplay
 
                 LocalDataManager.Instance.CompleteCampaignLevel();
                 LevelLoader.IsLevelActive = false;
+
+                // Show Win Screen Popup
+                if (GameplayUIManager.Instance != null)
+                {
+                    GameplayUIManager.Instance.ShowWinScreen();
+                }
                 return;
             }
 
@@ -32,14 +39,24 @@ namespace NumStrata.Gameplay
             if (HelperManager.Instance != null)
             {
                 helperUsesLeft = Mathf.Max(0, 3 - HelperManager.Instance.GetLevelHelperUses());
+                if (HelperManager.Instance.hasFreeHelperUsage)
+                {
+                    helperUsesLeft++;
+                }
             }
 
-            if (remainingTiles < 4 && helperUsesLeft <= 0)
+            if (remainingTiles + helperUsesLeft < 4)
             {
                 Debug.LogWarning(
-                    $"[CampaignSaveHooks] LOSE (temporary rule): remainingTiles={remainingTiles}, helperUsesLeft={helperUsesLeft}.");
+                    $"[CampaignSaveHooks] LOSE: remainingTiles={remainingTiles}, helperUsesLeft={helperUsesLeft} (Sum={remainingTiles + helperUsesLeft} < 4).");
                 LocalDataManager.Instance.FailCampaignLevel();
                 LevelLoader.IsLevelActive = false;
+
+                // Show Lose Screen Popup
+                if (GameplayUIManager.Instance != null)
+                {
+                    GameplayUIManager.Instance.ShowLoseScreen();
+                }
             }
         }
 
@@ -48,6 +65,12 @@ namespace NumStrata.Gameplay
             if (!LevelLoader.IsLevelActive) return;
             LocalDataManager.Instance?.FailCampaignLevel();
             LevelLoader.IsLevelActive = false;
+
+            // Show Lose Screen Popup
+            if (GameplayUIManager.Instance != null)
+            {
+                GameplayUIManager.Instance.ShowLoseScreen();
+            }
         }
     }
 }

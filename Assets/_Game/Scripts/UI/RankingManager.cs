@@ -25,9 +25,11 @@ namespace NumStrata.UI
 
         private RankingMode currentMode = RankingMode.Campaign;
         
-        // Caching
-        private List<DocumentSnapshot> cachedCampaignRanking = null;
-        private List<DocumentSnapshot> cachedStreakRanking = null;
+        // Caching (Lưu cache ngắn hạn)
+        private List<Dictionary<string, object>> cachedCampaignRanking = null;
+        private List<Dictionary<string, object>> cachedStreakRanking = null;
+        private float lastFetchTime = -1f;
+        private const float CACHE_COOLDOWN = 600f; // 10 phút (600 giây)
         private bool isFetching = false;
 
         private void Start()
@@ -71,12 +73,16 @@ namespace NumStrata.UI
 
         private void OnEnable()
         {
-            // Tự động load lại ranking mỗi khi bật UI Ranking này lên (để lấy điểm mới nhất)
+            // Tự động load lại ranking mỗi khi bật UI Ranking này lên (kết hợp cache ngắn hạn)
             if (CloudSyncManager.Instance != null && CloudSyncManager.Instance.IsConnected)
             {
-                // Force fetch new data when enabled
-                cachedCampaignRanking = null;
-                cachedStreakRanking = null;
+                if (Time.time - lastFetchTime > CACHE_COOLDOWN || lastFetchTime < 0)
+                {
+                    // Đã qua thời gian cooldown, xóa cache để bắt tải mới
+                    cachedCampaignRanking = null;
+                    cachedStreakRanking = null;
+                }
+                
                 LoadRanking(currentMode);
             }
         }
@@ -140,15 +146,12 @@ namespace NumStrata.UI
             }
 
             isFetching = true;
-            string orderByField = mode == RankingMode.Campaign ? "currentLevelIndex" : "totalStreak";
 
-            Debug.Log($"[RankingManager] Fetching Top 50 {mode}...");
+            Debug.Log($"[RankingManager] Fetching System Rankings...");
 
-            Query query = CloudSyncManager.Instance.Db.Collection("users")
-                .OrderByDescending(orderByField)
-                .Limit(50);
+            DocumentReference docRef = CloudSyncManager.Instance.Db.Collection("system").Document("rankings");
 
-            query.GetSnapshotAsync().ContinueWithOnMainThread(task =>
+            docRef.GetSnapshotAsync().ContinueWithOnMainThread(task =>
             {
                 isFetching = false;
                 if (task.IsCanceled || task.IsFaulted)
@@ -157,19 +160,41 @@ namespace NumStrata.UI
                     return;
                 }
 
-                List<DocumentSnapshot> results = task.Result.Documents.ToList();
-                
-                if (mode == RankingMode.Campaign)
-                    cachedCampaignRanking = results;
-                else
-                    cachedStreakRanking = results;
+                DocumentSnapshot snapshot = task.Result;
+                if (!snapshot.Exists)
+                {
+                    Debug.LogWarning("[RankingManager] System rankings document does not exist yet.");
+                    return;
+                }
 
-                DisplayRanking(results, mode);
-                UpdatePersonalRanking(results, mode);
+                // Lấy mảng dữ liệu tương ứng với mode
+                string fieldName = mode == RankingMode.Campaign ? "campaign" : "streak";
+                
+                if (snapshot.TryGetValue(fieldName, out List<object> rankingList))
+                {
+                    List<Dictionary<string, object>> parsedList = new List<Dictionary<string, object>>();
+                    foreach (object item in rankingList)
+                    {
+                        if (item is Dictionary<string, object> dict)
+                        {
+                            parsedList.Add(dict);
+                        }
+                    }
+
+                    if (mode == RankingMode.Campaign)
+                        cachedCampaignRanking = parsedList;
+                    else
+                        cachedStreakRanking = parsedList;
+
+                    lastFetchTime = Time.time; // Cập nhật thời gian fetch cuối cùng
+
+                    DisplayRanking(parsedList, mode);
+                    UpdatePersonalRanking(parsedList, mode);
+                }
             });
         }
 
-        private void DisplayRanking(List<DocumentSnapshot> documents, RankingMode mode)
+        private void DisplayRanking(List<Dictionary<string, object>> documents, RankingMode mode)
         {
             if (contentContainer == null || itemPrefab == null) return;
 
@@ -179,36 +204,21 @@ namespace NumStrata.UI
             }
 
             int rank = 1;
-            foreach (DocumentSnapshot doc in documents)
+            foreach (var doc in documents)
             {
-                string name = doc.GetValue<string>("displayName");
-                if (string.IsNullOrEmpty(name)) name = "Unknown Player";
-                
-                // Bỏ qua các người chơi chưa liên kết Google (tên mặc định Player_...)
-                if (name.StartsWith("Player_"))
-                    continue;
+                string name = doc.ContainsKey("displayName") ? doc["displayName"].ToString() : "Unknown Player";
+                string avatar = doc.ContainsKey("avatarUrl") ? doc["avatarUrl"].ToString() : "";
+                long score = doc.ContainsKey("score") ? System.Convert.ToInt64(doc["score"]) : 0;
 
                 RankingItemUI newItem = Instantiate(itemPrefab, contentContainer);
                 newItem.gameObject.SetActive(true); // Quan trọng: Đảm bảo Object được bật để Coroutine có thể chạy
                 
-                string avatar = doc.GetValue<string>("avatarUrl");
-                long score = 0;
-                
-                if (mode == RankingMode.Campaign)
-                {
-                    if (doc.TryGetValue("currentLevelIndex", out long levelScore)) score = levelScore;
-                }
-                else
-                {
-                    if (doc.TryGetValue("totalStreak", out long streakScore)) score = streakScore;
-                }
-
                 newItem.Setup(rank, name, score, avatar);
                 rank++;
             }
         }
 
-        private void UpdatePersonalRanking(List<DocumentSnapshot> documents, RankingMode mode)
+        private void UpdatePersonalRanking(List<Dictionary<string, object>> documents, RankingMode mode)
         {
             if (personalItemUI == null || LocalDataManager.Instance == null || LocalDataManager.Instance.CurrentPlayer == null) 
                 return;
@@ -219,7 +229,7 @@ namespace NumStrata.UI
             int myRank = -1;
             for (int i = 0; i < documents.Count; i++)
             {
-                if (documents[i].Id == myId)
+                if (documents[i].ContainsKey("id") && documents[i]["id"].ToString() == myId)
                 {
                     myRank = i + 1;
                     break;

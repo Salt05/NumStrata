@@ -41,7 +41,7 @@ namespace NumStrata.Utils
             while (elapsed < duration)
             {
                 if (rect == null) yield break;
-                elapsed += Time.deltaTime;
+                elapsed += Time.unscaledDeltaTime;
                 float t = elapsed / duration;
                 
                 // Công thức EaseOut Quat (nhanh lúc đầu, chậm dần về cuối)
@@ -89,7 +89,7 @@ namespace NumStrata.Utils
             while (elapsed < duration)
             {
                 if (target == null) yield break;
-                elapsed += Time.deltaTime;
+                elapsed += Time.unscaledDeltaTime;
                 float t = elapsed / duration;
                 
                 // Công thức EaseOut Sine cho mượt
@@ -165,7 +165,7 @@ namespace NumStrata.Utils
             while (true)
             {
                 if (rect == null) yield break;
-                elapsed += Time.deltaTime;
+                elapsed += Time.unscaledDeltaTime;
                 
                 // Hiệu ứng lơ lửng (Y) - Giảm biên độ xuống một nửa (amplitude mặc định 10f -> 5f)
                 float yOffset = Mathf.Sin(elapsed * speed) * (amplitude * 0.5f);
@@ -198,7 +198,7 @@ namespace NumStrata.Utils
             while (elapsed < duration)
             {
                 if (rect == null) yield break;
-                elapsed += Time.deltaTime;
+                elapsed += Time.unscaledDeltaTime;
 
                 // Sử dụng hàm Sin để tạo chuyển động qua lại mượt mà
                 // (elapsed / duration) dùng để giảm dần biên độ về 0 khi sắp hết thời gian

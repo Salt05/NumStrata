@@ -134,6 +134,7 @@ public bool RequestTilePlacement(Tile tile)
             }
 
             // PHÊ DUYỆT:
+            tile.SavePreviousState(); // Lưu trạng thái trước khi thay đổi parent
             occupiedTiles[targetSlotIndex] = tile; // Giữ chỗ logic
             tile.ResolveOverlapOnAccept();        // Cho phép mở khóa Board
 
@@ -166,6 +167,8 @@ public bool RequestTilePlacement(Tile tile)
                             break;
                         }
                     }
+
+                    order.tile.wasOnConveyor = wasOnConveyor; // Cập nhật trạng thái
 
                     if (wasOnConveyor)
                     {
@@ -320,8 +323,9 @@ public bool RequestTilePlacement(Tile tile)
                 {
                     if (occupiedTiles[4] != null || (occupiedTiles[0] != null && occupiedTiles[1] != null && occupiedTiles[2] != null && occupiedTiles[3] != null))
                     {
-                         Debug.LogWarning("<color=red>[Formula] Phép tính SAI! Xóa để chơi tiếp.</color>");
+                         Debug.LogWarning("<color=red>[Formula] Phép tính SAI! Xử thua.</color>");
                          ClearFormula(false);
+                         CampaignSaveHooks.NotifyLevelFailed();
                     }
                 }
             }
@@ -336,20 +340,28 @@ public bool RequestTilePlacement(Tile tile)
             Tile[] tilesToClear = (Tile[])occupiedTiles.Clone();
             for (int i = 0; i < occupiedTiles.Length; i++) occupiedTiles[i] = null;
 
-            StartCoroutine(VisualClearSequence(tilesToClear, 0.3f));
+            StartCoroutine(VisualClearSequence(tilesToClear, 0.3f, destroy));
         }
 
-        private System.Collections.IEnumerator VisualClearSequence(Tile[] tiles, float delay)
+        private System.Collections.IEnumerator VisualClearSequence(Tile[] tiles, float delay, bool destroy)
         {
             yield return new WaitForSeconds(delay);
             foreach (var tile in tiles)
             {
                 if (tile != null)
                 {
-                    if (UIEffectManager.Instance != null)
-                        StartCoroutine(ImprovedShrinkRoutine(tile.transform));
+                    if (destroy)
+                    {
+                        if (UIEffectManager.Instance != null)
+                            StartCoroutine(ImprovedShrinkRoutine(tile.transform));
+                        else
+                            Destroy(tile.gameObject);
+                    }
                     else
-                        Destroy(tile.gameObject);
+                    {
+                        // Hoàn trả tile về vị trí cũ thay vì tiêu hủy
+                        tile.ReturnToPreviousState();
+                    }
                 }
             }
         }
@@ -563,7 +575,7 @@ public bool RequestTilePlacement(Tile tile)
 
         public Tile GetRandomBoardTileTemplate()
         {
-            Tile[] allTiles = FindObjectsOfType<Tile>(true);
+            List<Tile> allTiles = Tile.AllExistingTiles;
             List<Tile> candidates = new List<Tile>();
 
             foreach (Tile tile in allTiles)
@@ -758,7 +770,7 @@ public bool RequestTilePlacement(Tile tile)
             NumStrata.Data.TileSpriteData source = tileSpriteData;
             if (source == null)
             {
-                LevelLoader loader = FindObjectOfType<LevelLoader>(true);
+                LevelLoader loader = LevelLoader.Instance;
                 if (loader != null)
                 {
                     source = loader.tileSpriteData;

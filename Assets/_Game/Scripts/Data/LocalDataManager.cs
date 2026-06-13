@@ -64,6 +64,14 @@ namespace NumStrata.Data
 
             LoadData();
             EnsureCloudSyncManager();
+
+            // Reset IsChallengeMode on boot to prevent stale state after crashes
+            if (PlayerPrefs.HasKey("IsChallengeMode"))
+            {
+                PlayerPrefs.DeleteKey("IsChallengeMode");
+                PlayerPrefs.Save();
+                Debug.Log("[LocalDataManager] Reset IsChallengeMode PlayerPref on startup.");
+            }
         }
 
         private void EnsureCloudSyncManager()
@@ -111,6 +119,8 @@ namespace NumStrata.Data
             {
                 CloudSyncManager.Instance.PushToCloud();
             }
+
+            OnSyncCompleted?.Invoke();
         }
 
         public void UpdatePlayerFromCloud(PlayerData remotePlayer)
@@ -120,6 +130,15 @@ namespace NumStrata.Data
             WritePlayerFileAtomic();
             playerDirty = false;
             Debug.Log("[LocalDataManager] Player data updated from cloud sync.");
+            OnSyncCompleted?.Invoke();
+        }
+
+        public void ResetToDefaultPlayer()
+        {
+            CreateDefaultPlayer();
+            WritePlayerFileAtomic();
+            playerDirty = false;
+            Debug.Log("[LocalDataManager] Player progress reset to default.");
             OnSyncCompleted?.Invoke();
         }
 

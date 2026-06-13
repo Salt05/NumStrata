@@ -34,14 +34,11 @@ namespace NumStrata.Gameplay
         /// <returns>Số lượng Tile có thể chơi được</returns>
         public int CountRemainingPlayableTiles()
         {
-            // Tìm toàn bộ các object đang active có gắn script Tile trong Scene
-            Tile[] allTilesInScene = FindObjectsOfType<Tile>();
-            
             int count = 0;
-            foreach (Tile tile in allTilesInScene)
+            foreach (Tile tile in Tile.AllExistingTiles)
             {
-                // Chỉ đếm những Tile có type khác Helper (Ví dụ: Number, Operator...)
-                if (tile.type != TileType.Helper)
+                // Chỉ đếm những Tile đang active và có type khác Helper
+                if (tile != null && tile.gameObject.activeInHierarchy && tile.type != TileType.Helper)
                 {
                     count++;
                 }

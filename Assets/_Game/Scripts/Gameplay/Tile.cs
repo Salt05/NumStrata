@@ -3,6 +3,7 @@ using UnityEngine.UI;
 using UnityEngine.EventSystems;
 using System.Collections.Generic;
 using NumStrata.Utils;
+using NumStrata.UI;
 
 namespace NumStrata.Gameplay
 {
@@ -18,6 +19,8 @@ namespace NumStrata.Gameplay
     /// </summary>
     public class Tile : MonoBehaviour, IPointerClickHandler, IPointerDownHandler, IPointerUpHandler
     {
+        public static readonly List<Tile> AllExistingTiles = new List<Tile>();
+
         [Header("Settings")]
         public TileType type;
         public int numberValue;
@@ -43,10 +46,25 @@ namespace NumStrata.Gameplay
         private int originalSortingOrder;
         private Canvas tileCanvas;
 
+        [HideInInspector] public Transform previousParent;
+        [HideInInspector] public Vector2 previousLocalPosition;
+        [HideInInspector] public Vector3 previousScale;
+        [HideInInspector] public bool hadAspectRatioFitter;
+        [HideInInspector] public bool wasOnConveyor;
+
         private void Awake()
         {
             rectTransform = GetComponent<RectTransform>();
             tileCanvas = GetComponent<Canvas>();
+            if (!AllExistingTiles.Contains(this))
+            {
+                AllExistingTiles.Add(this);
+            }
+        }
+
+        private void OnDestroy()
+        {
+            AllExistingTiles.Remove(this);
         }
 
         /// <summary>
@@ -333,7 +351,80 @@ namespace NumStrata.Gameplay
                     tileBelow.RemoveCoveringTile(this);
                 }
             }
-            coveredTiles.Clear();
+            // Không clear coveredTiles để có thể RestoreOverlap khi ghép sai
+        }
+
+        public void SavePreviousState()
+        {
+            previousParent = transform.parent;
+            previousLocalPosition = rectTransform.localPosition;
+            previousScale = rectTransform.localScale;
+            AspectRatioFitter fitter = GetComponent<AspectRatioFitter>();
+            hadAspectRatioFitter = fitter != null && fitter.enabled;
+        }
+
+        public void RestoreOverlap()
+        {
+            foreach (var tileBelow in coveredTiles)
+            {
+                if (tileBelow != null)
+                {
+                    tileBelow.AddCoveringTile(this);
+                }
+            }
+        }
+
+        public void ReturnToPreviousState()
+        {
+            // Tái kích hoạt raycast để click lại được
+            if (backgroundRenderer != null)
+            {
+                backgroundRenderer.raycastTarget = true;
+            }
+
+            UISizeSync sizeSync = GetComponent<UISizeSync>();
+            if (sizeSync != null) sizeSync.enabled = false;
+
+            AspectRatioFitter fitter = GetComponent<AspectRatioFitter>();
+            if (fitter != null) fitter.enabled = hadAspectRatioFitter;
+
+            if (wasOnConveyor && FormulaManager.Instance != null)
+            {
+                if (FormulaManager.Instance.TryGetNextConveyorSlot(out Transform slot, out int index))
+                {
+                    transform.SetParent(slot, true);
+                    FormulaManager.Instance.RegisterTileToConveyor(this, index);
+                    
+                    if (UIEffectManager.Instance != null)
+                    {
+                        UIEffectManager.Instance.MoveTo(rectTransform, Vector2.zero, 0.3f);
+                        UIEffectManager.Instance.ScaleTo(rectTransform, Vector3.one, 0.3f);
+                    }
+                    else
+                    {
+                        rectTransform.anchoredPosition = Vector2.zero;
+                        rectTransform.localScale = Vector3.one;
+                    }
+                }
+            }
+            else
+            {
+                if (previousParent != null)
+                {
+                    transform.SetParent(previousParent, true);
+                    if (UIEffectManager.Instance != null)
+                    {
+                        UIEffectManager.Instance.MoveTo(rectTransform, previousLocalPosition, 0.3f);
+                        UIEffectManager.Instance.ScaleTo(rectTransform, previousScale, 0.3f);
+                    }
+                    else
+                    {
+                        rectTransform.localPosition = previousLocalPosition;
+                        rectTransform.localScale = previousScale;
+                    }
+                }
+                RestoreOverlap();
+            }
         }
     }
 }

@@ -44,6 +44,7 @@ namespace NumStrata.Gameplay
         public bool isDeleteActive = false;
         private bool isSignNegative = false;
         private int currentLevelHelperUses = 0;
+        public bool hasFreeHelperUsage = false;
 
         public int GetLevelHelperUses() { return currentLevelHelperUses; }
         public void SetLevelHelperUses(int val) { currentLevelHelperUses = val; }
@@ -283,7 +284,7 @@ namespace NumStrata.Gameplay
 
         private void ToggleSpawn()
         {
-            if (currentLevelHelperUses >= 3 && !isSpawnActive)
+            if (currentLevelHelperUses >= 3 && !isSpawnActive && !hasFreeHelperUsage)
             {
                 Debug.LogWarning("[HelperManager] Đã đạt giới hạn sử dụng tối đa 3 Helper trong màn chơi này.");
                 return;
@@ -423,7 +424,15 @@ namespace NumStrata.Gameplay
 
                 // Đăng ký logic vào FormulaManager
                 FormulaManager.Instance.RegisterTileToConveyor(spawnedTile, index);
-                currentLevelHelperUses++;
+                if (hasFreeHelperUsage)
+                {
+                    hasFreeHelperUsage = false;
+                    Debug.Log("[HelperManager] Free helper usage consumed. Not increasing level uses count.");
+                }
+                else
+                {
+                    currentLevelHelperUses++;
+                }
                 Debug.Log($"[HelperManager] Helper used {currentLevelHelperUses}/3 this level.");
 
                 // Cập nhật số đếm Tile sau khi Helper Spawn thành công
@@ -471,9 +480,23 @@ namespace NumStrata.Gameplay
             public bool isMystery;
         }
 
-        private void ExecuteShuffle()
+        public void ExecuteShuffle()
         {
-            LevelLoader levelLoader = FindObjectOfType<LevelLoader>();
+            ExecuteShuffle(false);
+        }
+
+        public void ExecuteShuffle(bool isFree)
+        {
+            if (!isFree)
+            {
+                if (currentLevelHelperUses >= 3 && !hasFreeHelperUsage)
+                {
+                    Debug.LogWarning("[HelperManager] Đã đạt giới hạn sử dụng tối đa 3 Helper trong màn chơi này.");
+                    return;
+                }
+            }
+
+            LevelLoader levelLoader = LevelLoader.Instance;
             if (levelLoader == null) return;
 
             List<Tile> activeTiles = levelLoader.GetActiveBoardTiles();
@@ -540,10 +563,37 @@ namespace NumStrata.Gameplay
                     });
                 }
             }
+
+            if (!isFree)
+            {
+                if (hasFreeHelperUsage)
+                {
+                    hasFreeHelperUsage = false;
+                    Debug.Log("[HelperManager] Free Shuffle usage consumed. Not increasing level uses count.");
+                }
+                else
+                {
+                    currentLevelHelperUses++;
+                }
+                Debug.Log($"[HelperManager] Helper used {currentLevelHelperUses}/3 this level.");
+
+                if (NumStrata.Gameplay.TileCounter.Instance != null)
+                    NumStrata.Gameplay.TileCounter.Instance.UpdateTileCountUI();
+                CampaignSaveHooks.EvaluateTemporaryOutcomeAfterBoardChange();
+            }
         }
 
         private void ToggleDelete()
         {
+            if (!isDeleteActive)
+            {
+                if (currentLevelHelperUses >= 3 && !hasFreeHelperUsage)
+                {
+                    Debug.LogWarning("[HelperManager] Đã đạt giới hạn sử dụng tối đa 3 Helper trong màn chơi này.");
+                    return;
+                }
+            }
+
             isDeleteActive = !isDeleteActive;
             if (isDeleteActive)
             {
@@ -572,6 +622,18 @@ namespace NumStrata.Gameplay
         public void ExecuteTileDeletion(Tile tile)
         {
             if (tile == null) return;
+
+            // Charge helper use
+            if (hasFreeHelperUsage)
+            {
+                hasFreeHelperUsage = false;
+                Debug.Log("[HelperManager] Free Delete usage consumed. Not increasing level uses count.");
+            }
+            else
+            {
+                currentLevelHelperUses++;
+            }
+            Debug.Log($"[HelperManager] Helper used {currentLevelHelperUses}/3 this level.");
 
             bool isRemoved = false;
 
@@ -608,7 +670,7 @@ namespace NumStrata.Gameplay
             {
                 // Tile nằm trên Board
                 tile.ResolveOverlapOnAccept();
-                LevelLoader loader = FindObjectOfType<LevelLoader>();
+                LevelLoader loader = LevelLoader.Instance;
                 if (loader != null && loader.allSpawnedTiles.Contains(tile))
                 {
                     loader.allSpawnedTiles.Remove(tile);
@@ -647,6 +709,12 @@ namespace NumStrata.Gameplay
 
         private void ExecuteReturn()
         {
+            if (currentLevelHelperUses >= 3 && !hasFreeHelperUsage)
+            {
+                Debug.LogWarning("[HelperManager] Đã đạt giới hạn sử dụng tối đa 3 Helper trong màn chơi này.");
+                return;
+            }
+
             if (FormulaManager.Instance == null) return;
 
             // Bước 1: Kiểm tra dung lượng Conveyor
@@ -747,6 +815,22 @@ namespace NumStrata.Gameplay
                     }
                 }
             }
+
+            // Charge helper use
+            if (hasFreeHelperUsage)
+            {
+                hasFreeHelperUsage = false;
+                Debug.Log("[HelperManager] Free Return usage consumed. Not increasing level uses count.");
+            }
+            else
+            {
+                currentLevelHelperUses++;
+            }
+            Debug.Log($"[HelperManager] Helper used {currentLevelHelperUses}/3 this level.");
+
+            if (NumStrata.Gameplay.TileCounter.Instance != null)
+                NumStrata.Gameplay.TileCounter.Instance.UpdateTileCountUI();
+            CampaignSaveHooks.EvaluateTemporaryOutcomeAfterBoardChange();
         }
     }
 }

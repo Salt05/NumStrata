@@ -25,6 +25,9 @@ namespace NumStrata.UI
 
         private string pendingAvatarUrl;
 
+        private static System.Collections.Generic.Dictionary<string, Texture2D> avatarCache = 
+            new System.Collections.Generic.Dictionary<string, Texture2D>();
+
         private void OnEnable()
         {
             if (!string.IsNullOrEmpty(pendingAvatarUrl))
@@ -103,6 +106,37 @@ namespace NumStrata.UI
 
         private IEnumerator LoadAvatarCoroutine(string url)
         {
+            if (avatarCache.TryGetValue(url, out Texture2D cachedTexture) && cachedTexture != null)
+            {
+                if (avatarImage != null)
+                {
+                    avatarImage.texture = cachedTexture;
+                }
+                yield break;
+            }
+
+            if (url.StartsWith("data:image"))
+            {
+                try
+                {
+                    string base64Data = url.Substring(url.IndexOf(",") + 1);
+                    byte[] imageBytes = System.Convert.FromBase64String(base64Data);
+                    Texture2D texture = new Texture2D(2, 2);
+                    texture.LoadImage(imageBytes);
+                    
+                    avatarCache[url] = texture;
+                    if (avatarImage != null)
+                    {
+                        avatarImage.texture = texture;
+                    }
+                }
+                catch (System.Exception ex)
+                {
+                    Debug.LogError($"[RankingItemUI] Error parsing base64 avatar: {ex.Message}");
+                }
+                yield break;
+            }
+
             using (UnityWebRequest request = UnityWebRequestTexture.GetTexture(url))
             {
                 yield return request.SendWebRequest();
@@ -110,6 +144,10 @@ namespace NumStrata.UI
                 if (request.result == UnityWebRequest.Result.Success)
                 {
                     Texture2D texture = DownloadHandlerTexture.GetContent(request);
+                    if (!avatarCache.ContainsKey(url))
+                    {
+                        avatarCache[url] = texture;
+                    }
                     if (avatarImage != null)
                     {
                         avatarImage.texture = texture;

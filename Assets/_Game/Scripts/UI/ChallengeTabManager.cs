@@ -173,7 +173,7 @@ namespace NumStrata.UI
             PlayerPrefs.SetString(CampaignSession.PendingLevelIdKey, tempLevelId);
             PlayerPrefs.Save();
 
-            SceneManager.LoadScene(gameplaySceneName);
+            LoadingScreenManager.Instance.LoadScene(gameplaySceneName);
         }
     }
 }

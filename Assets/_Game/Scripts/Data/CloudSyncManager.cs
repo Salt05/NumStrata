@@ -199,7 +199,6 @@ namespace NumStrata.Data
                     else
                     {
                         currentUser = auth.CurrentUser;
-                        UpdateUserDataFromGoogle(currentUser);
                         Debug.Log("[CloudSyncManager] Anonymous account linked with Google successfully.");
                         callback?.Invoke(true, "Linked successfully.");
                         SyncWithCloud();
@@ -224,7 +223,6 @@ namespace NumStrata.Data
                 else
                 {
                     currentUser = auth.CurrentUser;
-                    UpdateUserDataFromGoogle(currentUser);
                     Debug.Log($"[CloudSyncManager] Signed in with Google successfully: {currentUser.UserId}");
                     callback?.Invoke(true, "Signed in successfully.");
                     SyncWithCloud();
@@ -232,49 +230,43 @@ namespace NumStrata.Data
             });
         }
 
-        private void UpdateUserDataFromGoogle(FirebaseUser user)
+        private void UpdatePlayerDataWithGoogleInfo(PlayerData data, FirebaseUser user)
         {
-            if (LocalDataManager.Instance.CurrentPlayer != null && user != null)
-            {
-                string displayName = user.DisplayName;
-                string avatarUrl = user.PhotoUrl?.ToString();
+            if (data == null || user == null) return;
 
-                // Nếu các trường root bị trống (thường gặp khi link tài khoản lần đầu), kiểm tra trong ProviderData
-                if (user.ProviderData != null)
+            bool isGoogle = false;
+            string displayName = user.DisplayName;
+            string avatarUrl = user.PhotoUrl?.ToString();
+
+            if (user.ProviderData != null)
+            {
+                foreach (var profile in user.ProviderData)
                 {
-                    foreach (var profile in user.ProviderData)
+                    if (profile.ProviderId == "google.com")
                     {
-                        if (profile.ProviderId == "google.com")
-                        {
-                            if (string.IsNullOrEmpty(displayName))
-                            {
-                                displayName = profile.DisplayName;
-                            }
-                            if (string.IsNullOrEmpty(avatarUrl))
-                            {
-                                avatarUrl = profile.PhotoUrl?.ToString();
-                            }
-                            break;
-                        }
+                        isGoogle = true;
+                        if (string.IsNullOrEmpty(displayName))
+                            displayName = profile.DisplayName;
+                        if (string.IsNullOrEmpty(avatarUrl))
+                            avatarUrl = profile.PhotoUrl?.ToString();
+                        break;
                     }
                 }
-
-                // Nếu vẫn trống, ta gán tạm email hoặc ID làm tên để không bị trống giao diện
-                if (string.IsNullOrEmpty(displayName))
-                {
-                    displayName = user.Email;
-                }
-                if (string.IsNullOrEmpty(displayName))
-                {
-                    displayName = "Google User";
-                }
-
-                LocalDataManager.Instance.CurrentPlayer.displayName = displayName;
-                LocalDataManager.Instance.CurrentPlayer.avatarUrl = avatarUrl ?? "";
-                LocalDataManager.Instance.CurrentPlayer.playerId = user.UserId;
-                LocalDataManager.Instance.MarkPlayerDirty();
-                LocalDataManager.Instance.FlushPlayerData();
             }
+
+            if (isGoogle || !user.IsAnonymous)
+            {
+                if (string.IsNullOrEmpty(displayName))
+                    displayName = user.Email;
+                if (string.IsNullOrEmpty(displayName))
+                    displayName = "Google User";
+
+                data.displayName = displayName;
+                data.avatarUrl = avatarUrl ?? "";
+            }
+
+            // Luôn đồng bộ ID người chơi trùng với Firebase UID
+            data.playerId = user.UserId;
         }
 
         public void MockGoogleSignIn(string mockName, string mockAvatarUrl, Action<bool, string> callback)
@@ -354,6 +346,7 @@ namespace NumStrata.Data
                         {
                             Debug.LogError($"[CloudSyncManager] Error parsing remote data: {ex.Message}. Overwriting cloud.");
                             // Nếu lỗi parse, đè bản local lên cloud
+                            UpdatePlayerDataWithGoogleInfo(localData, currentUser);
                             ForcePush(localData);
                         }
                     }
@@ -361,6 +354,7 @@ namespace NumStrata.Data
                     {
                         // Document tồn tại nhưng không có trường dataJson
                         Debug.LogWarning("[CloudSyncManager] Cloud document empty. Forcing push local.");
+                        UpdatePlayerDataWithGoogleInfo(localData, currentUser);
                         ForcePush(localData);
                     }
                 }
@@ -368,6 +362,7 @@ namespace NumStrata.Data
                 {
                     // Tài khoản mới chưa có data trên cloud -> Đẩy local hiện tại lên
                     Debug.Log("[CloudSyncManager] Cloud document does not exist. Initializing cloud save.");
+                    UpdatePlayerDataWithGoogleInfo(localData, currentUser);
                     ForcePush(localData);
                 }
             });
@@ -377,10 +372,24 @@ namespace NumStrata.Data
         {
             Debug.Log($"[CloudSyncManager] Merging. Local timestamp: {local.lastModifiedAt}, Cloud: {remote.lastModifiedAt}");
 
+            if (local.playerId != currentUser.UserId)
+            {
+                // Người chơi vừa chuyển tài khoản (đăng nhập tài khoản khác hoặc từ Guest lên Google)
+                Debug.Log($"[CloudSyncManager] Account changed from {local.playerId} to {currentUser.UserId}. Loading remote cloud save.");
+                UpdatePlayerDataWithGoogleInfo(remote, currentUser);
+                remote.isDirtyCloud = true;
+                LocalDataManager.Instance.UpdatePlayerFromCloud(remote);
+                isSyncing = false;
+                PushToCloud();
+                OnSyncStatusChanged?.Invoke("Sync Completed (Switched Account)");
+                return;
+            }
+
             if (remote.lastModifiedAt > local.lastModifiedAt)
             {
                 // Dữ liệu cloud mới hơn -> Nhận dữ liệu cloud
                 Debug.Log("[CloudSyncManager] Cloud data is newer. Pulling cloud data.");
+                UpdatePlayerDataWithGoogleInfo(remote, currentUser);
                 LocalDataManager.Instance.UpdatePlayerFromCloud(remote);
                 isSyncing = false;
                 OnSyncStatusChanged?.Invoke("Sync Completed (Pull)");
@@ -389,6 +398,7 @@ namespace NumStrata.Data
             {
                 // Dữ liệu local mới hơn hoặc local dirty -> Đẩy lên cloud
                 Debug.Log("[CloudSyncManager] Local data is newer or dirty. Pushing to cloud.");
+                UpdatePlayerDataWithGoogleInfo(local, currentUser);
                 PushToCloudInternal(local);
             }
             else
@@ -502,12 +512,24 @@ namespace NumStrata.Data
                 Debug.Log("[CloudSyncManager] User signed out from Firebase.");
             }
 
-            if (LocalDataManager.Instance != null && LocalDataManager.Instance.CurrentPlayer != null)
+#if GOOGLE_SIGNIN_ENABLED
+            try
             {
-                LocalDataManager.Instance.CurrentPlayer.displayName = "Player_" + UnityEngine.Random.Range(1000, 9999);
-                LocalDataManager.Instance.CurrentPlayer.avatarUrl = "";
-                LocalDataManager.Instance.MarkPlayerDirty();
-                LocalDataManager.Instance.FlushPlayerData();
+                if (Google.GoogleSignIn.DefaultInstance != null)
+                {
+                    Google.GoogleSignIn.DefaultInstance.SignOut();
+                    Debug.Log("[CloudSyncManager] Signed out from Google Sign-In.");
+                }
+            }
+            catch (System.Exception ex)
+            {
+                Debug.LogWarning($"[CloudSyncManager] Google Sign-Out error: {ex.Message}");
+            }
+#endif
+
+            if (LocalDataManager.Instance != null)
+            {
+                LocalDataManager.Instance.ResetToDefaultPlayer();
             }
 
             AuthenticateAnonymously();

@@ -2,6 +2,7 @@ using UnityEngine;
 using UnityEngine.UI;
 using System.Collections.Generic;
 using NumStrata.Data;
+using NumStrata.UI;
 
 namespace NumStrata.Gameplay
 {
@@ -53,6 +54,13 @@ namespace NumStrata.Gameplay
             {
                 Destroy(gameObject);
                 return;
+            }
+
+            // Auto-instantiate GameplayUIManager if missing
+            if (UnityEngine.Object.FindFirstObjectByType<NumStrata.UI.GameplayUIManager>() == null)
+            {
+                var go = new GameObject("GameplayUIManager");
+                go.AddComponent<NumStrata.UI.GameplayUIManager>();
             }
         }
 
@@ -239,37 +247,26 @@ namespace NumStrata.Gameplay
             if (resume != null && resume.activeLevelId == GetCurrentLevelId())
             {
                 RestoreSession(resume);
-            }
-            else
-            {
-                // 7. Smart Populate Values (Rải giá trị từ Pool vào Cây để tránh Deadlock)
-                SmartPopulateValues();
 
-                // 8. Rải mặt nạ Mystery
-                ApplyMysteryMasks(levelData.mysteryCount);
-            }
+                // Cập nhật lại UI đếm số lượng Tile sau khi Load xong
+                if (TileCounter.Instance != null) TileCounter.Instance.UpdateTileCountUI();
 
-            // Cập nhật lại UI đếm số lượng Tile sau khi Load xong
-            if (TileCounter.Instance != null) TileCounter.Instance.UpdateTileCountUI();
+                Debug.Log("[LevelLoader] Level load completed.");
 
-            Debug.Log("[LevelLoader] Level load completed.");
-
-            // Gameplay State hooks
-            IsLevelActive = true;
-            if (HelperManager.Instance != null)
-            {
-                if (resume != null)
+                IsLevelActive = true;
+                if (HelperManager.Instance != null)
                 {
                     HelperManager.Instance.SetLevelHelperUses(resume.levelHelperUses);
                 }
-                else
+                if (LocalDataManager.Instance != null)
                 {
-                    HelperManager.Instance.ResetHelperUses();
+                    LocalDataManager.Instance.BeginCampaignRun(GetCurrentLevelId());
                 }
             }
-            if (LocalDataManager.Instance != null)
+            else
             {
-                LocalDataManager.Instance.BeginCampaignRun(GetCurrentLevelId());
+                IsLevelActive = false;
+                StartCoroutine(SmartPopulateValuesRoutine(levelData.mysteryCount));
             }
         }
 
@@ -311,7 +308,7 @@ namespace NumStrata.Gameplay
             }
 
             // Save state of all tiles currently active in gameplay
-            Tile[] allTiles = FindObjectsOfType<Tile>(true);
+            List<Tile> allTiles = Tile.AllExistingTiles;
             foreach (Tile tile in allTiles)
             {
                 if (tile == null || !tile.gameObject.activeInHierarchy || !tile.isAssigned) continue;
@@ -556,169 +553,152 @@ namespace NumStrata.Gameplay
             }
         }
 
-        private void SmartPopulateValues()
+        private System.Collections.IEnumerator SmartPopulateValuesRoutine(int mysteryCount)
         {
-            if (pool == null || pool.Count == 0) return;
+            if (GameplayUIManager.Instance != null)
+            {
+                GameplayUIManager.Instance.ShowLoadingWheel(true);
+            }
+
+            if (pool == null || pool.Count == 0)
+            {
+                if (GameplayUIManager.Instance != null) GameplayUIManager.Instance.ShowLoadingWheel(false);
+                yield break;
+            }
+
             List<Equation> equations = parsedEquations ?? new List<Equation>();
             if (equations.Count == 0)
             {
                 Debug.LogWarning("[LevelLoader] No equations parsed from pool; falling back to random fill.");
                 FallbackRandomFill(pool);
-                return;
+                if (GameplayUIManager.Instance != null) GameplayUIManager.Instance.ShowLoadingWheel(false);
+                ApplyMysteryMasks(mysteryCount);
+                if (TileCounter.Instance != null) TileCounter.Instance.UpdateTileCountUI();
+                IsLevelActive = true;
+                if (HelperManager.Instance != null) HelperManager.Instance.ResetHelperUses();
+                if (LocalDataManager.Instance != null) LocalDataManager.Instance.BeginCampaignRun(GetCurrentLevelId());
+                yield break;
             }
+
             System.Random rnd = new System.Random();
-            if (!TrySolveSpawnAndWinningPlan(equations, rnd, out SolverResult solverResult))
+            Dictionary<int, Tile> tileById = BuildTileByIdMap();
+
+            // Convert to thread-safe data container
+            Dictionary<int, SolverTileData> solverTileDataMap = new Dictionary<int, SolverTileData>();
+            foreach (var kvp in tileById)
+            {
+                Tile t = kvp.Value;
+                SolverTileData std = new SolverTileData
+                {
+                    id = kvp.Key,
+                    gridX = t.gridX,
+                    gridY = t.gridY
+                };
+                solverTileDataMap[kvp.Key] = std;
+            }
+
+            foreach (var kvp in tileById)
+            {
+                Tile t = kvp.Value;
+                SolverTileData std = solverTileDataMap[kvp.Key];
+                foreach (var coveringTile in t.coveringTiles)
+                {
+                    if (coveringTile != null)
+                    {
+                        int covId = GetTileDebugId(coveringTile);
+                        if (covId > 0)
+                        {
+                            std.coveringTileIds.Add(covId);
+                        }
+                    }
+                }
+            }
+
+            // Run solver on background thread
+            System.Threading.Tasks.Task<SolverResult> solverTask = System.Threading.Tasks.Task.Run(() =>
+            {
+                SolverResult res;
+                bool solved = LevelSolver.TrySolveSpawnAndWinningPlan(equations, solverTileDataMap, rnd, out res);
+                return solved ? res : null;
+            });
+
+            // Wait for task completion asynchronously
+            while (!solverTask.IsCompleted)
+            {
+                yield return null;
+            }
+
+            if (GameplayUIManager.Instance != null)
+            {
+                GameplayUIManager.Instance.ShowLoadingWheel(false);
+            }
+
+            SolverResult solverResult = solverTask.Result;
+
+            if (solverResult == null)
             {
                 Debug.LogWarning("[LevelLoader] Could not find a non-deadlock winning plan. Falling back to random fill.");
                 FallbackRandomFill(pool);
-                return;
             }
-            Dictionary<int, Tile> tileById = BuildTileByIdMap();
-            foreach (var step in solverResult.spawnSteps)
+            else
             {
-                if (tileById.TryGetValue(step.tileId, out Tile tile))
+                foreach (var step in solverResult.spawnSteps)
                 {
-                    ApplyValueToTile(tile, step.token);
-                }
-            }
-            if (enableSpawnPlanDebugLog)
-            {
-                List<string> lines = new List<string>();
-                int stepIndex = 1;
-                foreach (var step in solverResult.winningPlanSteps)
-                {
-                    lines.Add($"Step {stepIndex}: {step.token} [{step.coord}]");
-                    stepIndex++;
-                }
-                Debug.Log("[SpawnPlan]\n" + string.Join("\n", lines));
-            }
-            List<Tile> remaining = new List<Tile>();
-            foreach (var t in allSpawnedTiles) if (!t.isAssigned) remaining.Add(t);
-            List<string> leftovers = new List<string>();
-            foreach (var s in pool) leftovers.Add(s);
-            foreach (var eq in solverResult.equationOrder)
-            {
-                foreach (var tok in eq.GetTokens()) leftovers.Remove(tok);
-            }
-            int li = 0;
-            while (li < leftovers.Count && remaining.Count > 0)
-            {
-                ApplyValueToTile(remaining[0], leftovers[li]);
-                remaining.RemoveAt(0);
-                li++;
-            }
-        }
-        private class SolverStep
-        {
-            public string token;
-            public int tileId;
-            public string coord;
-            public SolverStep(string token, int tileId, string coord)
-            {
-                this.token = token;
-                this.tileId = tileId;
-                this.coord = coord;
-            }
-        }
-        private class SolverResult
-        {
-            public List<SolverStep> spawnSteps;
-            public List<SolverStep> winningPlanSteps;
-            public List<Equation> equationOrder;
-        }
-        private bool TrySolveSpawnAndWinningPlan(List<Equation> equations, System.Random rnd, out SolverResult result)
-        {
-            result = null;
-            Dictionary<int, Tile> tileById = BuildTileByIdMap();
-            if (tileById.Count == 0) return false;
-            const int maxAttempts = 300;
-            for (int attempt = 0; attempt < maxAttempts; attempt++)
-            {
-                List<Equation> equationOrder = new List<Equation>(equations);
-                for (int i = 0; i < equationOrder.Count; i++)
-                {
-                    int j = rnd.Next(i, equationOrder.Count);
-                    Equation tmp = equationOrder[i];
-                    equationOrder[i] = equationOrder[j];
-                    equationOrder[j] = tmp;
-                }
-                if (TrySolveForEquationOrder(equationOrder, tileById, rnd, out SolverResult solved))
-                {
-                    result = solved;
-                    return true;
-                }
-            }
-            return false;
-        }
-        private bool TrySolveForEquationOrder(List<Equation> equationOrder, Dictionary<int, Tile> tileById, System.Random rnd, out SolverResult result)
-        {
-            result = null;
-            SolverResult solvedResult = null;
-            HashSet<int> removed = new HashSet<int>();
-            HashSet<int> unassigned = new HashSet<int>(tileById.Keys);
-            List<List<SolverStep>> segments = new List<List<SolverStep>>();
-            bool SearchEquation(int equationIndex)
-            {
-                if (equationIndex >= equationOrder.Count)
-                {
-                    List<int> finalPlanIds = BuildPlanIdsFromSegments(segments, null);
-                    if (!IsReplayUnlockable(finalPlanIds, tileById)) return false;
-                    List<SolverStep> spawnSteps = new List<SolverStep>();
-                    List<SolverStep> winningSteps = new List<SolverStep>();
-                    foreach (var seg in segments)
+                    if (tileById.TryGetValue(step.tileId, out Tile tile))
                     {
-                        spawnSteps.AddRange(seg);
-                        for (int i = seg.Count - 1; i >= 0; i--)
-                        {
-                            winningSteps.Add(seg[i]);
-                        }
+                        ApplyValueToTile(tile, step.token);
                     }
-                    solvedResult = new SolverResult
-                    {
-                        spawnSteps = spawnSteps,
-                        winningPlanSteps = winningSteps,
-                        equationOrder = new List<Equation>(equationOrder)
-                    };
-                    return true;
                 }
-                List<string> eqTokens = equationOrder[equationIndex].GetTokens();
-                eqTokens.Reverse(); // spawn order: result -> operands
-                List<SolverStep> currentSegment = new List<SolverStep>();
-                bool SearchToken(int tokenIndex)
+
+                if (enableSpawnPlanDebugLog)
                 {
-                    if (tokenIndex >= eqTokens.Count)
+                    List<string> lines = new List<string>();
+                    int stepIndex = 1;
+                    foreach (var step in solverResult.winningPlanSteps)
                     {
-                        segments.Add(new List<SolverStep>(currentSegment));
-                        if (SearchEquation(equationIndex + 1)) return true;
-                        segments.RemoveAt(segments.Count - 1);
-                        return false;
+                        lines.Add($"Step {stepIndex}: {step.token} [{step.coord}]");
+                        stepIndex++;
                     }
-                    List<int> candidates = CollectUnlockedUnassigned(unassigned, removed, tileById);
-                    if (candidates.Count == 0) return false;
-                    ShuffleInPlace(candidates, rnd);
-                    string token = eqTokens[tokenIndex];
-                    foreach (int candidateId in candidates)
-                    {
-                        Tile tile = tileById[candidateId];
-                        string coord = $"{tile.gridX}-{tile.gridY}";
-                        removed.Add(candidateId);
-                        unassigned.Remove(candidateId);
-                        currentSegment.Add(new SolverStep(token, candidateId, coord));
-                        List<int> partialPlanIds = BuildPlanIdsFromSegments(segments, currentSegment);
-                        bool feasiblePrefix = IsReplayUnlockable(partialPlanIds, tileById);
-                        if (feasiblePrefix && SearchToken(tokenIndex + 1)) return true;
-                        currentSegment.RemoveAt(currentSegment.Count - 1);
-                        unassigned.Add(candidateId);
-                        removed.Remove(candidateId);
-                    }
-                    return false;
+                    Debug.Log("[SpawnPlan]\n" + string.Join("\n", lines));
                 }
-                return SearchToken(0);
+
+                List<Tile> remaining = new List<Tile>();
+                foreach (var t in allSpawnedTiles) if (!t.isAssigned) remaining.Add(t);
+                List<string> leftovers = new List<string>();
+                foreach (var s in pool) leftovers.Add(s);
+                foreach (var eq in solverResult.equationOrder)
+                {
+                    foreach (var tok in eq.GetTokens()) leftovers.Remove(tok);
+                }
+                int li = 0;
+                while (li < leftovers.Count && remaining.Count > 0)
+                {
+                    ApplyValueToTile(remaining[0], leftovers[li]);
+                    remaining.RemoveAt(0);
+                    li++;
+                }
             }
-            bool solved = SearchEquation(0);
-            if (solved) result = solvedResult;
-            return solved;
+
+            // Apply mystery masks
+            ApplyMysteryMasks(mysteryCount);
+
+            // Update Tile Counter UI
+            if (TileCounter.Instance != null) TileCounter.Instance.UpdateTileCountUI();
+
+            Debug.Log("[LevelLoader] Level load completed.");
+
+            // Gameplay State hooks
+            IsLevelActive = true;
+            if (HelperManager.Instance != null)
+            {
+                HelperManager.Instance.ResetHelperUses();
+            }
+            if (LocalDataManager.Instance != null)
+            {
+                LocalDataManager.Instance.BeginCampaignRun(GetCurrentLevelId());
+            }
         }
+
         private Dictionary<int, Tile> BuildTileByIdMap()
         {
             Dictionary<int, Tile> map = new Dictionary<int, Tile>();
@@ -728,65 +708,6 @@ namespace NumStrata.Gameplay
                 if (id > 0) map[id] = tile;
             }
             return map;
-        }
-        private List<int> CollectUnlockedUnassigned(HashSet<int> unassigned, HashSet<int> removed, Dictionary<int, Tile> tileById)
-        {
-            List<int> candidates = new List<int>();
-            foreach (int id in unassigned)
-            {
-                if (IsUnlockedByIds(id, removed, tileById)) candidates.Add(id);
-            }
-            return candidates;
-        }
-        private bool IsUnlockedByIds(int tileId, HashSet<int> removed, Dictionary<int, Tile> tileById)
-        {
-            if (!tileById.TryGetValue(tileId, out Tile tile) || tile == null) return false;
-            foreach (var coveringTile in tile.coveringTiles)
-            {
-                if (coveringTile == null) continue;
-                int coveringId = GetTileDebugId(coveringTile);
-                if (coveringId > 0 && !removed.Contains(coveringId)) return false;
-            }
-            return true;
-        }
-        private List<int> BuildPlanIdsFromSegments(List<List<SolverStep>> committedSegments, List<SolverStep> currentSegment)
-        {
-            List<int> ids = new List<int>();
-            foreach (var seg in committedSegments)
-            {
-                for (int i = seg.Count - 1; i >= 0; i--)
-                {
-                    ids.Add(seg[i].tileId);
-                }
-            }
-            if (currentSegment != null)
-            {
-                for (int i = currentSegment.Count - 1; i >= 0; i--)
-                {
-                    ids.Add(currentSegment[i].tileId);
-                }
-            }
-            return ids;
-        }
-        private bool IsReplayUnlockable(List<int> planTileIds, Dictionary<int, Tile> tileById)
-        {
-            HashSet<int> replayRemoved = new HashSet<int>();
-            foreach (int id in planTileIds)
-            {
-                if (!IsUnlockedByIds(id, replayRemoved, tileById)) return false;
-                replayRemoved.Add(id);
-            }
-            return true;
-        }
-        private void ShuffleInPlace(List<int> values, System.Random rnd)
-        {
-            for (int i = 0; i < values.Count; i++)
-            {
-                int j = rnd.Next(i, values.Count);
-                int tmp = values[i];
-                values[i] = values[j];
-                values[j] = tmp;
-            }
         }
 
         private void FallbackRandomFill(List<string> poolData)

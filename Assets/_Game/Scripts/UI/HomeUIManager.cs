@@ -118,7 +118,7 @@ namespace NumStrata.UI
             PlayerPrefs.Save();
 
             Debug.Log($"[HomeUIManager] Starting campaign level '{levelId}', loading scene '{gameplaySceneName}'.");
-            SceneManager.LoadScene(gameplaySceneName);
+            LoadingScreenManager.Instance.LoadScene(gameplaySceneName);
         }
 
         private static void EnsureLocalDataManager()

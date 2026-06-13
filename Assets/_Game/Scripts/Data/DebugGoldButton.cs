@@ -4,7 +4,9 @@ using TMPro;
 using UnityEngine.UI;
 using System.Collections;
 
-public class DebugGoldButton : MonoBehaviour
+namespace NumStrata.Data
+{
+    public class DebugGoldButton : MonoBehaviour
 {
     [Header("Profile UI Elements")]
     [SerializeField] public GameObject profileContainer;
@@ -33,6 +35,7 @@ public class DebugGoldButton : MonoBehaviour
         }
     }
 
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
     private void OnGUI()
     {
         int width = 221;
@@ -116,6 +119,7 @@ public class DebugGoldButton : MonoBehaviour
             }
         }
     }
+#endif
 
     private void TriggerGoogleLogin(string name, string avatarUrl)
     {
@@ -210,4 +214,5 @@ public class DebugGoldButton : MonoBehaviour
             }
         }
     }
+}
 }
